@@ -35,6 +35,32 @@ function generateTempPassword() {
   return `${word.charAt(0).toUpperCase()}${word.slice(1)}-${num}`;
 }
 
+// Lists longer than this default to collapsed (just a count + "Show"
+// link) so the page reads as a set of settings, not a wall of names.
+// State persists for the rest of this visit to the page, so toggling
+// a list open survives adding/removing an item from it.
+const COLLAPSE_THRESHOLD = 6;
+const collapseState = {};
+
+function applyListCollapse(key, listEl, toggleBtn, countEl, count, noun) {
+  countEl.textContent = `${count} ${noun}${count === 1 ? "" : "s"}`;
+  if (count <= COLLAPSE_THRESHOLD) {
+    listEl.classList.remove("collapsed");
+    toggleBtn.style.display = "none";
+    return;
+  }
+  toggleBtn.style.display = "";
+  if (!(key in collapseState)) collapseState[key] = true; // long lists start collapsed
+  const collapsed = collapseState[key];
+  listEl.classList.toggle("collapsed", collapsed);
+  toggleBtn.textContent = collapsed ? "Show" : "Hide";
+  toggleBtn.onclick = () => {
+    collapseState[key] = !collapseState[key];
+    listEl.classList.toggle("collapsed", collapseState[key]);
+    toggleBtn.textContent = collapseState[key] ? "Show" : "Hide";
+  };
+}
+
 export function renderAdmin(container, deptId, dept, myUid) {
   // Local working copies — saved back to the department doc as a whole
   // array/object each time something changes, same pattern as the rest
@@ -66,6 +92,10 @@ export function renderAdmin(container, deptId, dept, myUid) {
           <input type="text" id="theatreName" placeholder="Theatre name, e.g. Theatre 3" required>
           <button class="btn btn-primary btn-sm" type="submit">Add theatre</button>
         </form>
+        <div class="section-list-head">
+          <span class="count" id="theatreCount"></span>
+          <button class="list-toggle-btn" id="theatreToggleBtn" style="display:none;">Show</button>
+        </div>
         <div id="theatreList" class="admin-list"></div>
       </section>
 
@@ -79,6 +109,10 @@ export function renderAdmin(container, deptId, dept, myUid) {
           </select>
           <button class="btn btn-primary btn-sm" type="submit">Add staff</button>
         </form>
+        <div class="section-list-head">
+          <span class="count" id="staffCount"></span>
+          <button class="list-toggle-btn" id="staffToggleBtn" style="display:none;">Show</button>
+        </div>
         <div id="staffList" class="admin-list"></div>
       </section>
 
@@ -99,6 +133,10 @@ export function renderAdmin(container, deptId, dept, myUid) {
           <input type="date" id="bhDate" required>
           <button class="btn btn-primary btn-sm" type="submit">Add date</button>
         </form>
+        <div class="section-list-head">
+          <span class="count" id="bhCount"></span>
+          <button class="list-toggle-btn" id="bhToggleBtn" style="display:none;">Show</button>
+        </div>
         <div id="bhList" class="admin-list"></div>
       </section>
 
@@ -119,6 +157,10 @@ export function renderAdmin(container, deptId, dept, myUid) {
           <button class="btn btn-primary btn-sm" type="submit">Create account</button>
         </form>
         <div id="userFormError" class="empty-note" style="display:none;color:var(--status-oncall);"></div>
+        <div class="section-list-head">
+          <span class="count" id="userCount"></span>
+          <button class="list-toggle-btn" id="userToggleBtn" style="display:none;">Show</button>
+        </div>
         <div id="userList" class="admin-list"></div>
       </section>
     </div>
@@ -126,6 +168,10 @@ export function renderAdmin(container, deptId, dept, myUid) {
 
   const theatreListEl = container.querySelector("#theatreList");
   const staffListEl = container.querySelector("#staffList");
+  const theatreCountEl = container.querySelector("#theatreCount");
+  const theatreToggleBtn = container.querySelector("#theatreToggleBtn");
+  const staffCountEl = container.querySelector("#staffCount");
+  const staffToggleBtn = container.querySelector("#staffToggleBtn");
 
   async function refreshTheatres() {
     const theatres = await listTheatres(deptId);
@@ -141,6 +187,7 @@ export function renderAdmin(container, deptId, dept, myUid) {
       });
       theatreListEl.appendChild(row);
     });
+    applyListCollapse("theatres", theatreListEl, theatreToggleBtn, theatreCountEl, theatres.length, "theatre");
   }
 
   async function refreshStaff() {
@@ -158,6 +205,7 @@ export function renderAdmin(container, deptId, dept, myUid) {
       });
       staffListEl.appendChild(row);
     });
+    applyListCollapse("staff", staffListEl, staffToggleBtn, staffCountEl, staff.length, "staff member");
   }
 
   container.querySelector("#theatreForm").addEventListener("submit", async (e) => {
@@ -212,6 +260,8 @@ export function renderAdmin(container, deptId, dept, myUid) {
 
   // ---- Bank holidays ----------------------------------------------------
   const bhListEl = container.querySelector("#bhList");
+  const bhCountEl = container.querySelector("#bhCount");
+  const bhToggleBtn = container.querySelector("#bhToggleBtn");
   function refreshBankHolidays() {
     const dates = Object.keys(bankHolidays).sort();
     bhListEl.innerHTML = dates.length ? "" : `<p class="empty-note">No bank holidays added yet.</p>`;
@@ -226,6 +276,7 @@ export function renderAdmin(container, deptId, dept, myUid) {
       });
       bhListEl.appendChild(row);
     });
+    applyListCollapse("bankHolidays", bhListEl, bhToggleBtn, bhCountEl, dates.length, "bank holiday");
   }
 
   container.querySelector("#bhForm").addEventListener("submit", async (e) => {
@@ -250,6 +301,8 @@ export function renderAdmin(container, deptId, dept, myUid) {
   // ---- User accounts -----------------------------------------------------
   const userListEl = container.querySelector("#userList");
   const userFormError = container.querySelector("#userFormError");
+  const userCountEl = container.querySelector("#userCount");
+  const userToggleBtn = container.querySelector("#userToggleBtn");
   const ROLE_LABELS = { viewer: "Viewer", editor: "Editor", admin: "Admin" };
 
   async function refreshUsers() {
@@ -281,6 +334,7 @@ export function renderAdmin(container, deptId, dept, myUid) {
       });
       userListEl.appendChild(row);
     });
+    applyListCollapse("users", userListEl, userToggleBtn, userCountEl, users.length, "account");
   }
 
   container.querySelector("#genPasswordBtn").addEventListener("click", () => {
