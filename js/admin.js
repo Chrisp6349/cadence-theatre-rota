@@ -313,8 +313,8 @@ export function renderAdmin(container, deptId, dept, myUid) {
       const row = document.createElement("div");
       row.className = "admin-row";
       row.innerHTML = `
-        <span>${u.displayName || u.email}${isMe ? ` <span class="tag-mini">you</span>` : ""}
-          <span class="tag-mini">${u.email}</span>
+        <span>${u.displayName || u.email || "(unnamed)"}${isMe ? ` <span class="tag-mini">you</span>` : ""}
+          ${u.email ? `<span class="tag-mini">${u.email}</span>` : ""}
         </span>
         <span style="display:flex;align-items:center;gap:8px;">
           <select data-role-for="${u.uid}" ${isMe ? "disabled title=\"You can't change your own role here\"" : ""}>
