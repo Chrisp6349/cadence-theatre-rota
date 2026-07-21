@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cadence — On Call Calendar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/cadence.css">
+<style>
+  .cal-nav{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+  .cal-nav button{background:var(--surface);border:1px solid var(--ink-150);border-radius:var(--r-sm);
+    padding:7px 12px;font-family:var(--font-body);font-size:12.5px;font-weight:600;color:var(--ink-700);cursor:pointer;}
+  .cal-nav button:hover{background:var(--ink-100);}
+  .cal-nav .this-month-btn{color:var(--teal-600);border-color:var(--teal-100);}
+  .cal-nav-label{font-family:var(--font-display);font-weight:800;font-size:16px;flex:1;text-align:center;}
+
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .cal-dow{font-family:var(--font-mono);font-size:10px;color:var(--ink-500);text-transform:uppercase;
+    letter-spacing:.05em;text-align:center;padding-bottom:4px;}
+  .cal-cell{background:var(--surface);border:1px solid var(--ink-150);border-radius:var(--r-sm);
+    padding:8px;min-height:78px;cursor:pointer;transition:box-shadow .15s;}
+  .cal-cell:hover{box-shadow:var(--shadow-sm);}
+  .cal-cell.outside{background:var(--canvas);opacity:.5;}
+  .cal-cell.today{border-color:var(--teal-500);background:var(--teal-50);}
+  .cal-cell.bh{border-color:var(--status-oncall);}
+  .cal-date{font-family:var(--font-mono);font-size:11px;color:var(--ink-500);display:flex;align-items:center;gap:4px;margin-bottom:5px;}
+  .cal-bh-dot{width:6px;height:6px;border-radius:50%;background:var(--status-oncall);flex-shrink:0;}
+  .cal-oncall{font-size:11.5px;color:var(--ink-900);line-height:1.4;}
+  .cal-oncall .home-tag{font-family:var(--font-mono);font-size:8.5px;color:var(--teal-700);}
+  .cal-empty{font-size:11px;color:var(--ink-300);font-style:italic;}
+
+  @media (max-width:700px){
+    .cal-cell{min-height:60px;padding:6px;}
+    .cal-oncall{font-size:10.5px;}
+  }
+</style>
+</head>
+<body>
+<div id="shellRoot"></div>
+
+<script type="module">
+  import { requireSession } from "./js/auth.js";
+  import { renderShell } from "./js/shell.js";
+  import { getDepartment } from "./js/department.js";
+  import { loadWeek } from "./js/rota.js";
+
+  const { user, profile } = await requireSession();
+  const dept = await getDepartment(profile.departmentId);
+  profile.departmentName = dept?.name || "Department";
+
+  const content = renderShell({ profile, activePage: "calendar", title: "On Call Calendar" });
+
+  const ALL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+  // Same timezone-safe formatting as dashboard.html — never .toISOString()
+  // on a locally-constructed date, since that converts to UTC first and
+  // silently shifts the date back by one during British Summer Time.
+  function localIso(d) {
+    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  function addDays(d, n) {
+    const r = new Date(d);
+    r.setDate(r.getDate() + n);
+    return r;
+  }
+  const todayIso = localIso(new Date());
+
+  // ---- State: which month is displayed -----------------------------------
+  let viewDate = new Date(); // any date within the displayed month
+  viewDate.setDate(1);
+
+  function mondayOnOrBefore(d) {
+    const r = new Date(d);
+    const offset = (r.getDay() + 6) % 7; // Mon=0..Sun=6
+    r.setDate(r.getDate() - offset);
+    return r;
+  }
+
+  async function render() {
+    const monthStart = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+    const monthEnd = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0);
+    const gridStart = mondayOnOrBefore(monthStart);
+    const gridEnd = mondayOnOrBefore(monthEnd);
+    gridEnd.setDate(gridEnd.getDate() + 6); // Sunday of monthEnd's week
+    const numRows = Math.round((gridEnd - gridStart) / 86400000 / 7) + 1;
+
+    // One Firestore read per week row — the weeks doc is keyed by its
+    // Monday date and its day-fields line up exactly with ALL_DAYS, so a
+    // whole grid row maps to one week doc.
+    const weekMondays = Array.from({ length: numRows }, (_, r) => addDays(gridStart, r * 7));
+    const weekDatas = await Promise.all(
+      weekMondays.map(m => loadWeek(profile.departmentId, localIso(m)).then(w => w.data || {}))
+    );
+
+    function onCallSummary(rota, dayName, isWeekend) {
+      if (isWeekend) {
+        const odp1 = rota[`${dayName}_oncall_odp1`], sess1 = rota[`${dayName}_oncall_session1`];
+        const odp2 = rota[`${dayName}_oncall_odp2`], sess2 = rota[`${dayName}_oncall_session2`];
+        const odps = [odp1 && `${odp1}${sess1 ? " (" + sess1 + ")" : ""}`, odp2 && `${odp2}${sess2 ? " (" + sess2 + ")" : ""}`].filter(Boolean);
+        const anaes = rota[`${dayName}_oncall_anaes`] || "";
+        return { odps, anaes, home: false };
+      }
+      const odp = rota[`${dayName}_oncall_odp`] || "";
+      const anaes = rota[`${dayName}_oncall_anaes`] || "";
+      const home = !!rota[`${dayName}_oncall_home`];
+      return { odps: odp ? [odp] : [], anaes, home };
+    }
+
+    let gridHtml = "";
+    for (let r = 0; r < numRows; r++) {
+      for (let c = 0; c < 7; c++) {
+        const date = addDays(weekMondays[r], c);
+        const iso = localIso(date);
+        const dayName = ALL_DAYS[c];
+        const isWeekend = c >= 5;
+        const isOutside = date.getMonth() !== viewDate.getMonth();
+        const isToday = iso === todayIso;
+        const isBh = !!(dept.bankHolidays && dept.bankHolidays[iso]);
+        const info = onCallSummary(weekDatas[r], dayName, isWeekend);
+
+        const oncallHtml = info.odps.length
+          ? info.odps.map(o => `<div>${o}${info.home ? ` <span class="home-tag">HOME</span>` : ""}</div>`).join("") +
+            (info.anaes ? `<div>${info.anaes}</div>` : "")
+          : `<div class="cal-empty">—</div>`;
+
+        gridHtml += `<div class="cal-cell${isOutside ? " outside" : ""}${isToday ? " today" : ""}${isBh ? " bh" : ""}"
+            data-week="${localIso(weekMondays[r])}" data-day-idx="${c}">
+          <div class="cal-date">${date.getDate()}${isBh ? `<span class="cal-bh-dot" title="Bank holiday"></span>` : ""}</div>
+          <div class="cal-oncall">${oncallHtml}</div>
+        </div>`;
+      }
+    }
+
+    const dowHtml = ALL_DAYS.map(d => `<div class="cal-dow">${d.slice(0, 3)}</div>`).join("");
+    const monthLabel = viewDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+    const isCurrentMonth = viewDate.getFullYear() === new Date().getFullYear() && viewDate.getMonth() === new Date().getMonth();
+
+    content.innerHTML = `
+      <div class="cal-nav">
+        <button id="prevMonthBtn">‹ Previous month</button>
+        <span class="cal-nav-label">${monthLabel}</span>
+        ${!isCurrentMonth ? `<button class="this-month-btn" id="thisMonthBtn">This month</button>` : ""}
+        <button id="nextMonthBtn">Next month ›</button>
+      </div>
+      <div class="cal-grid">${dowHtml}${gridHtml}</div>
+    `;
+
+    document.getElementById("prevMonthBtn").addEventListener("click", () => changeMonth(-1));
+    document.getElementById("nextMonthBtn").addEventListener("click", () => changeMonth(1));
+    const thisMonthBtn = document.getElementById("thisMonthBtn");
+    if (thisMonthBtn) thisMonthBtn.addEventListener("click", () => changeMonth(0, true));
+
+    document.querySelectorAll(".cal-cell").forEach(cell => {
+      cell.addEventListener("click", () => {
+        const week = cell.dataset.week;
+        const dayIdx = cell.dataset.dayIdx;
+        window.location.href = `dashboard.html?week=${week}&day=${dayIdx}`;
+      });
+    });
+  }
+
+  function changeMonth(delta, jumpToThisMonth) {
+    if (jumpToThisMonth) {
+      viewDate = new Date();
+      viewDate.setDate(1);
+    } else {
+      viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + delta, 1);
+    }
+    render();
+  }
+
+  render();
+</script>
+</body>
+</html>
