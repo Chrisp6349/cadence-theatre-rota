@@ -33,15 +33,23 @@
     padding:2px 6px;border-radius:4px;margin-top:2px;}
 
   @media print{
+    @page{ size: A4 landscape; margin: 12mm; }
     #shellRoot .app-sidebar,#shellRoot .app-topbar,.rota-toolbar{display:none !important;}
     #shellRoot .app-main,#shellRoot .app-content{overflow:visible !important;height:auto !important;padding:0 !important;}
     body{background:#fff;}
-    .table-scroll{border:none;overflow:visible;}
+    .print-header{display:flex !important;}
+    .table-scroll{border:none;overflow:visible;padding:0;}
     table.rota-table{font-size:10.5px;}
     table.rota-table th{color:#000;}
+    table.rota-table tr.today td{background:none !important;}
     h4.section-title{margin-top:14px;}
     .weekend-table{page-break-inside:avoid;}
   }
+  .print-header{display:none;align-items:baseline;justify-content:space-between;margin-bottom:14px;
+    border-bottom:2px solid var(--ink-900);padding-bottom:8px;}
+  .print-header .ph-org{font-family:var(--font-display);font-weight:800;font-size:16px;}
+  .print-header .ph-dept{font-size:12px;color:var(--ink-500);margin-top:2px;}
+  .print-header .ph-week{font-family:var(--font-mono);font-size:11px;color:var(--ink-500);text-align:right;}
 </style>
 </head>
 <body>
@@ -70,6 +78,13 @@
       ${editable ? `<button class="btn btn-ghost btn-sm" id="clearBtn">Clear week</button>
                     <button class="btn btn-secondary btn-sm" id="saveDraftBtn">Save draft</button>
                     <button class="btn btn-primary btn-sm" id="publishBtn">Publish</button>` : ""}
+    </div>
+    <div class="print-header" id="printHeader">
+      <div>
+        <div class="ph-org" id="phOrg"></div>
+        <div class="ph-dept" id="phDept"></div>
+      </div>
+      <div class="ph-week" id="phWeek"></div>
     </div>
     <div class="table-scroll"><div id="weekdayGrid"></div></div>
     <h4 class="section-title">Weekend</h4>
@@ -149,6 +164,13 @@
     });
     document.getElementById("weekdayGrid").innerHTML = weekdayHtml;
     document.getElementById("weekendGrid").innerHTML = weekendHtml;
+
+    document.getElementById("phOrg").textContent = dept.hospitalName || "";
+    document.getElementById("phDept").textContent = dept.name || profile.departmentName || "";
+    const mon = new Date(weekInput.value + "T00:00:00");
+    const fmt = d => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+    document.getElementById("phWeek").textContent = `Week commencing ${fmt(mon)}`;
+
     window.print();
   });
   window.addEventListener("afterprint", renderOnly);
