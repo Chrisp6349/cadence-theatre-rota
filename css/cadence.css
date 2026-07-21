@@ -1,5 +1,5 @@
 /* =====================================================================
-   Cadence design system — shared tokens & components
+   Cadence design system â€” shared tokens & components
    Reused across login, dashboard shell, rota, and admin screens.
    ===================================================================== */
 
@@ -29,7 +29,27 @@
   --font-display:'Manrope',sans-serif;
   --font-body:'Inter',sans-serif;
   --font-mono:'IBM Plex Mono',monospace;
+
+  --toast-bg:#10141F;
 }
+
+/* ---------- Dark mode ----------
+   Almost every component below is built on these tokens, so flipping
+   them here re-themes the whole app. The sidebar is already dark in
+   light mode and is left as-is. */
+html[data-theme="dark"]{
+  --ink-900:#EDEFF3; --ink-700:#C7CCD6; --ink-500:#9AA3B2; --ink-300:#6B7280;
+  --ink-150:#2A2F3B; --ink-100:#232833; --canvas:#12151C; --surface:#1B1F29;
+
+  --teal-100:#12312E; --teal-50:#182420;
+
+  --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+  --shadow-md:0 4px 12px rgba(0,0,0,.35);
+  --shadow-lg:0 12px 32px rgba(0,0,0,.45);
+
+  --toast-bg:#2A2F3B;
+}
+html[data-theme="dark"] ::selection{background:var(--teal-700);color:#fff;}
 
 *{box-sizing:border-box;}
 body{margin:0;background:var(--canvas);color:var(--ink-900);font-family:var(--font-body);-webkit-font-smoothing:antialiased;}
@@ -144,8 +164,20 @@ h4.admin-h{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;
 .empty-note{color:var(--ink-300);font-size:13px;}
 
 /* ---------- Toast ---------- */
-.toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,8px);background:var(--ink-900);color:#fff;
+.toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,8px);background:var(--toast-bg);color:#fff;
   padding:10px 18px;border-radius:var(--r-sm);font-size:13px;font-weight:600;opacity:0;pointer-events:none;
   transition:all var(--dur-panel) var(--ease-out);z-index:50;}
 .toast.show{opacity:1;transform:translate(-50%,0);}
 .toast.error{background:var(--status-oncall);}
+
+/* ---------- Text size ----------
+   Scales the main content area via CSS zoom (well supported in the
+   WebKit browsers this app targets â€” Safari/iPadOS). Sidebar/topbar
+   chrome stays fixed size so navigation doesn't jump around. */
+html[data-text-size="sm"] .app-content{zoom:0.88;}
+html[data-text-size="lg"] .app-content{zoom:1.18;}
+
+/* ---------- Topbar display controls ---------- */
+.topbar-right .icon-btn.active{background:var(--teal-100);}
+.topbar-right .icon-btn.active svg{stroke:var(--teal-700);}
+.text-size-label{font-family:var(--font-mono);font-size:11px;color:var(--ink-500);width:16px;text-align:center;}
