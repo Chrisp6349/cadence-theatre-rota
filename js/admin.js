@@ -43,6 +43,16 @@ export function renderAdmin(container, deptId, dept) {
   container.innerHTML = `
     <div class="admin-grid">
       <section>
+        <h4 class="admin-h">Department details</h4>
+        <p class="empty-note" style="margin:-6px 0 10px;">Shown on the printed rota.</p>
+        <form id="detailsForm" class="inline-form">
+          <input type="text" id="hospitalName" placeholder="Hospital / Trust name" value="${dept.hospitalName || ""}">
+          <input type="text" id="deptName" placeholder="Department name" value="${dept.name || ""}">
+          <button class="btn btn-primary btn-sm" type="submit">Save details</button>
+        </form>
+      </section>
+
+      <section>
         <h4 class="admin-h">Theatres</h4>
         <form id="theatreForm" class="inline-form">
           <input type="text" id="theatreName" placeholder="Theatre name, e.g. Theatre 3" required>
@@ -198,6 +208,15 @@ export function renderAdmin(container, deptId, dept) {
     await updateDepartment(deptId, { bankHolidays });
     input.value = "";
     refreshBankHolidays();
+  });
+
+  container.querySelector("#detailsForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const hospitalName = container.querySelector("#hospitalName").value.trim();
+    const deptName = container.querySelector("#deptName").value.trim();
+    await updateDepartment(deptId, { hospitalName, name: deptName });
+    dept.hospitalName = hospitalName;
+    dept.name = deptName;
   });
 
   refreshTheatres();
