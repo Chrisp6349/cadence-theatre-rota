@@ -54,6 +54,14 @@
   .myweek-day .md-label{font-family:var(--font-mono);font-size:10px;color:var(--ink-500);text-transform:uppercase;margin-bottom:5px;}
   .myweek-day .md-role{font-size:12.5px;font-weight:600;color:var(--ink-900);}
   .myweek-day .md-off{font-size:12.5px;color:var(--ink-300);font-style:italic;}
+
+  .ti-card{margin-top:24px;}
+  .ti-body{display:flex;flex-direction:column;gap:10px;}
+  .ti-fact{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;color:var(--ink-700);line-height:1.5;}
+  .ti-fact .ti-dot{width:6px;height:6px;border-radius:50%;background:var(--teal-500);flex-shrink:0;margin-top:6px;}
+  .ti-shuffle{display:flex;justify-content:flex-end;margin-top:12px;}
+  .ti-shuffle button{background:none;border:none;color:var(--teal-600);font-size:12px;font-weight:600;
+    cursor:pointer;padding:0;text-decoration:underline;}
 </style>
 </head>
 <body>
@@ -64,6 +72,7 @@
   import { renderShell } from "./js/shell.js";
   import { getDepartment, listTheatres, listStaff } from "./js/department.js";
   import { loadWeek, mondayOfCurrentWeek } from "./js/rota.js";
+  import { loadTheatreIntelligence } from "./js/insights.js";
   import { applyTheme } from "./js/theme.js";
   applyTheme();
 
@@ -233,6 +242,34 @@
     }
   }
 
+  // ---- Theatre Intelligence -------------------------------------------
+  // Fetched once in the background (see the bottom of this file) and
+  // cached — day/week navigation re-renders the page often, but that
+  // should never trigger another Firestore read for this. "Shuffle"
+  // just re-picks from the same already-fetched fact pool.
+  let intelligence = null;
+
+  function renderTI() {
+    const el = document.getElementById("tiCard");
+    if (!el) return;
+    if (!intelligence) {
+      el.innerHTML = `<p class="empty-note">Loading…</p>`;
+      return;
+    }
+    if (!intelligence.hasData) {
+      el.innerHTML = `<p class="empty-note">Check back once a few weeks of rota have been published — Theatre Intelligence needs some history to work with.</p>`;
+      return;
+    }
+    const facts = intelligence.pickFacts(4);
+    el.innerHTML = `
+      <div class="ti-body">
+        ${facts.map(f => `<div class="ti-fact"><span class="ti-dot"></span><span>${f}</span></div>`).join("")}
+      </div>
+      <div class="ti-shuffle"><button id="tiShuffleBtn">Shuffle</button></div>
+    `;
+    document.getElementById("tiShuffleBtn").addEventListener("click", renderTI);
+  }
+
   // ---- Main render ---------------------------------------------------------
   function render() {
     const day = ALL_DAYS[selectedDayIdx];
@@ -309,6 +346,8 @@
         <div class="card"><div class="card-label">On call ODP</div><div class="card-value" style="font-size:20px;">${onCallOdp}${onCallHome ? ` <span class="tc-list" style="font-size:9px;">FROM HOME</span>` : ""}</div></div>
         <div class="card"><div class="card-label">On call anaesthetist</div><div class="card-value" style="font-size:20px;">${onCallAnaes}</div></div>
       </div>
+      <div class="strip-label ti-card">Theatre Intelligence</div>
+      <div class="card" id="tiCard"></div>
       <div class="strip-label myweek-card">My Week</div>
       <div class="card" id="myweekCard"></div>
     `;
@@ -325,6 +364,7 @@
     });
 
     initMyWeek();
+    renderTI();
   }
 
   async function changeWeek(delta, jumpToThisWeek) {
@@ -336,6 +376,11 @@
 
   await loadRota();
   render();
+
+  loadTheatreIntelligence(profile.departmentId, theatres, mondayOfCurrentWeek(), todayIso).then(ti => {
+    intelligence = ti;
+    renderTI();
+  });
 </script>
 </body>
 </html>
