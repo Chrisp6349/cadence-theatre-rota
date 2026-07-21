@@ -9,7 +9,20 @@
 <link rel="stylesheet" href="css/cadence.css">
 <style>
   .strip-label{font-family:var(--font-mono);font-size:10.5px;color:var(--ink-500);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
-  .status-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:16px;margin-bottom:20px;border-bottom:1px solid var(--ink-150);}
+  .bh-banner{display:flex;align-items:center;gap:8px;background:var(--status-oncall-bg);color:var(--status-oncall);
+    font-weight:600;font-size:12.5px;padding:8px 14px;border-radius:var(--r-sm);margin-bottom:16px;}
+  .theatre-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin-bottom:24px;}
+  .theatre-card{background:var(--surface);border:1px solid var(--ink-150);border-radius:var(--r-md);padding:14px;}
+  .tc-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .tc-head .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .tc-head .dot.available{background:var(--status-available);}
+  .tc-head .dot.inlist{background:var(--status-inlist);animation:pulse-dot 1.8s infinite;}
+  .tc-head .dot.closed{background:var(--status-closed);}
+  .tc-name{font-weight:700;font-size:13.5px;flex:1;}
+  .tc-list{font-family:var(--font-mono);font-size:10px;background:var(--ink-100);color:var(--ink-500);
+    padding:2px 6px;border-radius:4px;flex-shrink:0;}
+  .tc-row{font-size:12.5px;color:var(--ink-700);padding:2px 0;}
+  .tc-empty{font-size:12.5px;color:var(--ink-300);font-style:italic;}
   .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:8px;}
   .empty-note{color:var(--ink-500);font-size:13.5px;padding:20px 0;}
 </style>
@@ -33,33 +46,66 @@
   const week = await loadWeek(profile.departmentId, mondayOfCurrentWeek());
   const rota = week.data || {};
 
-  const today = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date().getDay()];
+  const now = new Date();
+  const todayIso = now.toISOString().split("T")[0];
+  const today = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][now.getDay()];
+  const isWeekend = today === "Saturday" || today === "Sunday";
 
-  function theatreStatus(t) {
-    const hasList = ["odp1","odp2","anaes"].some(f => rota[`${today}_${t.id}_${f}`]);
+  function theatreInfo(t) {
+    const odp1 = rota[`${today}_${t.id}_odp1`] || "";
+    const odp2 = rota[`${today}_${t.id}_odp2`] || "";
+    const anaes = rota[`${today}_${t.id}_anaes`] || "";
     const listType = rota[`${today}_${t.id}_list`] || "";
-    if (!hasList) return "available";
-    if (listType.includes("MAINTENANCE") || listType.includes("NO LIST")) return "closed";
-    return "inlist";
+    const hasList = !!(odp1 || odp2 || anaes);
+    let status = "available";
+    if (hasList) status = (listType.includes("MAINTENANCE") || listType.includes("NO LIST")) ? "closed" : "inlist";
+    return { odp1, odp2, anaes, listType, status };
   }
 
-  const stripHtml = theatres.length
+  const theatreCardsHtml = theatres.length
     ? theatres.map(t => {
-        const s = theatreStatus(t);
-        return `<span class="status-chip ${s}"><span class="dot"></span>${t.name}</span>`;
+        const info = theatreInfo(t);
+        const rows = [info.odp1, info.odp2, info.anaes].filter(Boolean)
+          .map(n => `<div class="tc-row">${n}</div>`).join("");
+        return `<div class="theatre-card">
+          <div class="tc-head">
+            <span class="dot ${info.status}"></span>
+            <span class="tc-name">${t.name}</span>
+            ${info.listType ? `<span class="tc-list">${info.listType}</span>` : ""}
+          </div>
+          ${rows || `<div class="tc-empty">No allocation</div>`}
+        </div>`;
       }).join("")
     : `<span class="empty-note">No theatres configured yet — add them in Administration.</span>`;
 
-  const sessionsToday = theatres.filter(t => theatreStatus(t) === "inlist").length;
-  const onCallOdp = rota[`${today}_oncall_odp`] || "—";
-  const onCallAnaes = rota[`${today}_oncall_anaes`] || "—";
+  const sessionsToday = theatres.filter(t => theatreInfo(t).status === "inlist").length;
+
+  // On-call keys differ between the weekday grid and the weekend grid
+  // (see rota.js renderGrid) — pick the right ones for today.
+  let onCallOdp, onCallAnaes, onCallHome;
+  if (isWeekend) {
+    const odp1 = rota[`${today}_oncall_odp1`], sess1 = rota[`${today}_oncall_session1`];
+    const odp2 = rota[`${today}_oncall_odp2`], sess2 = rota[`${today}_oncall_session2`];
+    onCallOdp = [odp1 && `${odp1}${sess1 ? " (" + sess1 + ")" : ""}`, odp2 && `${odp2}${sess2 ? " (" + sess2 + ")" : ""}`]
+      .filter(Boolean).join(", ") || "—";
+    onCallAnaes = rota[`${today}_oncall_anaes`] || "—";
+    onCallHome = false;
+  } else {
+    onCallOdp = rota[`${today}_oncall_odp`] || "—";
+    onCallAnaes = rota[`${today}_oncall_anaes`] || "—";
+    onCallHome = !!rota[`${today}_oncall_home`];
+  }
+
+  const bhBanner = (dept.bankHolidays && dept.bankHolidays[todayIso])
+    ? `<div class="bh-banner">Today is a bank holiday</div>` : "";
 
   content.innerHTML = `
+    ${bhBanner}
     <div class="strip-label">Live theatre status — ${today}</div>
-    <div class="status-strip">${stripHtml}</div>
+    <div class="theatre-grid">${theatreCardsHtml}</div>
     <div class="stat-grid">
       <div class="card"><div class="card-label">Sessions today</div><div class="card-value">${sessionsToday} / ${theatres.length}</div></div>
-      <div class="card"><div class="card-label">On call ODP</div><div class="card-value" style="font-size:20px;">${onCallOdp}</div></div>
+      <div class="card"><div class="card-label">On call ODP</div><div class="card-value" style="font-size:20px;">${onCallOdp}${onCallHome ? ` <span class="tc-list" style="font-size:9px;">FROM HOME</span>` : ""}</div></div>
       <div class="card"><div class="card-label">On call anaesthetist</div><div class="card-value" style="font-size:20px;">${onCallAnaes}</div></div>
     </div>
   `;
