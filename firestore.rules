@@ -1,0 +1,75 @@
+rules_version = '2';
+
+// ---------------------------------------------------------------------
+// Security model
+// ---------------------------------------------------------------------
+// - Every signed-in user has a document at /users/{uid} with:
+//     departmentId : which department they belong to
+//     role         : "viewer" | "editor" | "admin"
+// - A user can only ever read/write data under their own department.
+// - "viewer"  -> read-only everywhere.
+// - "editor"  -> can read/write the weekly rota, read-only on department
+//                settings (theatres/staff/list options).
+// - "admin"   -> can also write department settings and manage users.
+// ---------------------------------------------------------------------
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function myDept() {
+      return me().departmentId;
+    }
+
+    function myRole() {
+      return me().role;
+    }
+
+    function inMyDept(deptId) {
+      return signedIn() && myDept() == deptId;
+    }
+
+    function isEditorOrAdmin(deptId) {
+      return inMyDept(deptId) && (myRole() == 'editor' || myRole() == 'admin');
+    }
+
+    function isAdmin(deptId) {
+      return inMyDept(deptId) && myRole() == 'admin';
+    }
+
+    // Users can read their own profile (needed to bootstrap role/department).
+    // Only admins can create/edit user records for their own department.
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin(resource.data.departmentId));
+      allow write: if signedIn() &&
+        ((request.resource.data.departmentId == myDept() && isAdmin(myDept())));
+    }
+
+    match /departments/{deptId} {
+      allow read: if inMyDept(deptId);
+      allow write: if isAdmin(deptId);
+
+      match /theatres/{docId} {
+        allow read: if inMyDept(deptId);
+        allow write: if isAdmin(deptId);
+      }
+
+      match /staff/{docId} {
+        allow read: if inMyDept(deptId);
+        allow write: if isAdmin(deptId);
+      }
+
+      match /weeks/{weekId} {
+        allow read: if inMyDept(deptId);
+        allow write: if isEditorOrAdmin(deptId);
+      }
+    }
+  }
+}

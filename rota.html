@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cadence — Rota</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/cadence.css">
+<style>
+  .rota-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
+  .rota-toolbar input[type=date]{font-family:var(--font-body);padding:8px 10px;border-radius:var(--r-sm);border:1px solid var(--ink-150);}
+  .rota-toolbar .spacer{flex:1;}
+  .view-badge{font-family:var(--font-mono);font-size:11px;padding:5px 10px;border-radius:var(--r-pill);background:var(--ink-100);color:var(--ink-500);}
+  .view-badge.editing{background:var(--teal-100);color:var(--teal-700);}
+  .table-scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--ink-150);border-radius:var(--r-lg);padding:4px;}
+  table.rota-table{border-collapse:collapse;width:100%;font-size:12.5px;}
+  table.rota-table th{font-family:var(--font-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;
+    color:var(--ink-500);text-align:left;padding:10px 8px;border-bottom:1px solid var(--ink-150);white-space:nowrap;}
+  table.rota-table td{padding:6px 8px;border-bottom:1px solid var(--ink-100);vertical-align:top;}
+  table.rota-table tr.today td{background:var(--teal-50);}
+  table.rota-table td.daycell{font-weight:600;white-space:nowrap;}
+  table.rota-table .bh{color:var(--status-oncall);font-weight:700;font-size:10px;}
+  table.rota-table select{width:100%;font-family:var(--font-body);font-size:12px;padding:4px;margin-bottom:2px;
+    border:1px solid var(--ink-150);border-radius:4px;}
+  table.rota-table .ro-field{display:block;padding:3px 0;font-size:12.5px;}
+  .weekend-table{margin-top:20px;}
+  h4.section-title{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-500);margin:22px 0 8px;}
+</style>
+</head>
+<body>
+<div id="shellRoot"></div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+  import { requireSession } from "./js/auth.js";
+  import { renderShell } from "./js/shell.js";
+  import { getDepartment, listTheatres, listStaff, splitStaff } from "./js/department.js";
+  import { loadWeek, saveWeek, mondayOfCurrentWeek, renderGrid, attachChangeHandlers } from "./js/rota.js";
+
+  const { user, profile } = await requireSession();
+  const dept = await getDepartment(profile.departmentId);
+  profile.departmentName = dept?.name || "Department";
+  const editable = ["editor", "admin"].includes(profile.role);
+
+  const content = renderShell({ profile, activePage: "rota", title: "Rota" });
+
+  content.innerHTML = `
+    <div class="rota-toolbar">
+      <input type="date" id="weekDate">
+      <span class="view-badge ${editable ? "editing" : ""}">${editable ? "Editing" : "Read only"}</span>
+      <div class="spacer"></div>
+      ${editable ? `<button class="btn btn-secondary btn-sm" id="saveDraftBtn">Save draft</button>
+                    <button class="btn btn-primary btn-sm" id="publishBtn">Publish</button>` : ""}
+    </div>
+    <div class="table-scroll"><div id="weekdayGrid"></div></div>
+    <h4 class="section-title">Weekend</h4>
+    <div class="table-scroll"><div id="weekendGrid"></div></div>
+  `;
+
+  const theatres = await listTheatres(profile.departmentId);
+  const staffList = await listStaff(profile.departmentId);
+  const staff = splitStaff(staffList);
+
+  const weekInput = document.getElementById("weekDate");
+  weekInput.value = mondayOfCurrentWeek();
+
+  let rota = {};
+
+  function toast(msg, isError) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.className = "toast show" + (isError ? " error" : "");
+    setTimeout(() => t.classList.remove("show"), 2400);
+  }
+
+  async function loadAndRender() {
+    const week = await loadWeek(profile.departmentId, weekInput.value);
+    rota = week.data || {};
+
+    if (!theatres.length) {
+      document.getElementById("weekdayGrid").innerHTML = `<p style="padding:20px;color:var(--ink-500);">
+        No theatres set up yet. ${profile.role === "admin" ? "Add them in Administration." : "Ask your admin to add them."}</p>`;
+      document.getElementById("weekendGrid").innerHTML = "";
+      return;
+    }
+
+    const { weekdayHtml, weekendHtml } = renderGrid({
+      weekStart: weekInput.value, dept, theatres, staff, rota, editable
+    });
+    document.getElementById("weekdayGrid").innerHTML = weekdayHtml;
+    document.getElementById("weekendGrid").innerHTML = weekendHtml;
+
+    if (editable) {
+      attachChangeHandlers(document.getElementById("weekdayGrid"), rota);
+      attachChangeHandlers(document.getElementById("weekendGrid"), rota);
+    }
+  }
+
+  weekInput.addEventListener("change", loadAndRender);
+
+  if (editable) {
+    document.getElementById("saveDraftBtn").addEventListener("click", async () => {
+      try { await saveWeek(profile.departmentId, weekInput.value, rota, false, user.uid); toast("Draft saved"); }
+      catch (e) { toast("Couldn't save — try again", true); }
+    });
+    document.getElementById("publishBtn").addEventListener("click", async () => {
+      try { await saveWeek(profile.departmentId, weekInput.value, rota, true, user.uid); toast("Published"); }
+      catch (e) { toast("Couldn't publish — try again", true); }
+    });
+  }
+
+  await loadAndRender();
+</script>
+</body>
+</html>

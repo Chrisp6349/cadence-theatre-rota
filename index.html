@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cadence — Sign in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/cadence.css">
+<style>
+  body{display:flex;align-items:center;justify-content:center;min-height:100vh;}
+  .login-card{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--ink-150);
+    border-radius:var(--r-lg);box-shadow:var(--shadow-lg);padding:36px 32px;}
+  .login-mark{width:40px;height:40px;border-radius:10px;background:var(--teal-600);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:800;margin-bottom:20px;}
+  .login-card h1{font-size:22px;margin-bottom:6px;}
+  .login-card p.sub{color:var(--ink-500);font-size:13.5px;margin:0 0 24px;}
+  .login-error{display:none;background:var(--status-oncall-bg);color:var(--status-oncall);font-size:13px;
+    padding:10px 12px;border-radius:var(--r-sm);margin-bottom:16px;}
+  .login-error.show{display:block;}
+  .btn-block{width:100%;justify-content:center;}
+</style>
+</head>
+<body>
+  <form class="login-card" id="loginForm">
+    <div class="login-mark">C</div>
+    <h1>Sign in to Cadence</h1>
+    <p class="sub">Enter the details your department admin gave you.</p>
+    <div class="login-error" id="loginError"></div>
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="email" id="email" required autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input type="password" id="password" required autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary btn-block" type="submit" id="loginBtn">Sign in</button>
+  </form>
+
+  <script type="module">
+    import { login } from "./js/auth.js";
+
+    const form = document.getElementById("loginForm");
+    const errBox = document.getElementById("loginError");
+    const btn = document.getElementById("loginBtn");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errBox.classList.remove("show");
+      btn.disabled = true;
+      btn.textContent = "Signing in…";
+      try {
+        await login(document.getElementById("email").value.trim(), document.getElementById("password").value);
+        window.location.href = "dashboard.html";
+      } catch (err) {
+        errBox.textContent = "Couldn't sign in — check your email and password.";
+        errBox.classList.add("show");
+        btn.disabled = false;
+        btn.textContent = "Sign in";
+      }
+    });
+  </script>
+</body>
+</html>
