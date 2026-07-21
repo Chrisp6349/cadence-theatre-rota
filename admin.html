@@ -16,6 +16,8 @@
   import { renderShell } from "./js/shell.js";
   import { getDepartment } from "./js/department.js";
   import { renderAdmin } from "./js/admin.js";
+  import { applyTheme } from "./js/theme.js";
+  applyTheme();
 
   const { profile } = await requireSession();
   const dept = await getDepartment(profile.departmentId);
