@@ -15,6 +15,7 @@
   import { requireSession } from "./js/auth.js";
   import { renderShell } from "./js/shell.js";
   import { getDepartment } from "./js/department.js";
+  import { renderAdmin } from "./js/admin.js";
 
   const { profile } = await requireSession();
   const dept = await getDepartment(profile.departmentId);
@@ -25,17 +26,7 @@
   if (profile.role !== "admin") {
     content.innerHTML = `<p style="color:var(--ink-500);">This page is only available to admins.</p>`;
   } else {
-    content.innerHTML = `
-      <div class="card" style="max-width:480px;">
-        <div class="card-label">Coming next</div>
-        <p style="font-size:14px;color:var(--ink-700);line-height:1.6;margin-top:8px;">
-          Theatres, staff, and list-option management from the browser — no more editing
-          Firestore documents by hand. For now, add/edit theatres and staff directly in the
-          Firestore console under <code>departments/${profile.departmentId}/theatres</code>
-          and <code>.../staff</code>.
-        </p>
-      </div>
-    `;
+    renderAdmin(content, profile.departmentId);
   }
 </script>
 </body>
