@@ -17,7 +17,8 @@ const ICONS = {
   settings: `<circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 00.32 1.76"/>`,
   moon: `<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>`,
   minus: `<path d="M5 12h14"/>`,
-  plus: `<path d="M12 5v14M5 12h14"/>`
+  plus: `<path d="M12 5v14M5 12h14"/>`,
+  menu: `<path d="M4 6h16M4 12h16M4 18h16"/>`
 };
 
 function iconSvg(key){
@@ -48,6 +49,7 @@ export function renderShell({ profile, activePage, title }) {
 
   root.innerHTML = `
     <div class="app-shell">
+      <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
       <aside class="app-sidebar" id="sidebar">
         <div class="sb-trust">
           <div class="logo-mark">${(profile.departmentName || "??").slice(0,2).toUpperCase()}</div>
@@ -73,6 +75,7 @@ export function renderShell({ profile, activePage, title }) {
       </aside>
       <div class="app-main">
         <div class="app-topbar">
+          <button class="icon-btn mobile-menu-btn" id="mobileMenuBtn" aria-label="Open menu">${iconSvg("menu")}</button>
           <h3>${title}</h3>
           <div class="topbar-right">
             <button class="icon-btn" id="textSizeDownBtn" title="Smaller text">${iconSvg("minus")}</button>
@@ -91,6 +94,21 @@ export function renderShell({ profile, activePage, title }) {
   });
   document.getElementById("logoutBtn").addEventListener("click", logout);
   initThemeControls(root);
+
+  // Mobile nav: the sidebar is hidden entirely below 900px (see cadence.css)
+  // so it doesn't cover the whole screen on a phone. This button and the
+  // backdrop are how you get it back — tap the icon to open, tap the
+  // backdrop (or navigate to another page) to close.
+  const sidebarEl = document.getElementById("sidebar");
+  const backdropEl = document.getElementById("sidebarBackdrop");
+  document.getElementById("mobileMenuBtn").addEventListener("click", () => {
+    sidebarEl.classList.add("mobile-open");
+    backdropEl.classList.add("show");
+  });
+  backdropEl.addEventListener("click", () => {
+    sidebarEl.classList.remove("mobile-open");
+    backdropEl.classList.remove("show");
+  });
 
   return document.getElementById("pageContent");
 }
