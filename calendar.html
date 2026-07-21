@@ -44,6 +44,8 @@
   import { renderShell } from "./js/shell.js";
   import { getDepartment } from "./js/department.js";
   import { loadWeek } from "./js/rota.js";
+  import { applyTheme } from "./js/theme.js";
+  applyTheme();
 
   const { user, profile } = await requireSession();
   const dept = await getDepartment(profile.departmentId);
