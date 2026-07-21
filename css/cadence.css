@@ -128,6 +128,20 @@ a{color:inherit;}
   border:1px solid var(--ink-150);background:var(--surface);color:var(--ink-900);
 }
 .field input:focus,.field select:focus{outline:2px solid var(--teal-500);outline-offset:1px;}
+/* ---------- Administration ---------- */
+.admin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:32px;}
+h4.admin-h{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-500);margin:0 0 12px;}
+.inline-form{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+.inline-form input,.inline-form select{
+  font-family:var(--font-body);font-size:13.5px;padding:8px 10px;border-radius:var(--r-sm);
+  border:1px solid var(--ink-150);background:var(--surface);flex:1;min-width:140px;
+}
+.admin-list{display:flex;flex-direction:column;gap:6px;}
+.admin-row{display:flex;align-items:center;justify-content:space-between;background:var(--surface);
+  border:1px solid var(--ink-150);border-radius:var(--r-sm);padding:8px 12px;font-size:13.5px;}
+.tag-mini{font-family:var(--font-mono);font-size:10px;color:var(--ink-500);background:var(--ink-100);
+  padding:2px 6px;border-radius:4px;margin-left:6px;}
+.empty-note{color:var(--ink-300);font-size:13px;}
 
 /* ---------- Toast ---------- */
 .toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,8px);background:var(--ink-900);color:#fff;
