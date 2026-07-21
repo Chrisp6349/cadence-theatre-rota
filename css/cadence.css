@@ -1,5 +1,5 @@
 /* =====================================================================
-   Cadence design system â€” shared tokens & components
+   Cadence design system — shared tokens & components
    Reused across login, dashboard shell, rota, and admin screens.
    ===================================================================== */
 
@@ -31,6 +31,7 @@
   --font-mono:'IBM Plex Mono',monospace;
 
   --toast-bg:#10141F;
+  --sidebar-bg:#10141F;
 }
 
 /* ---------- Dark mode ----------
@@ -99,7 +100,7 @@ a{color:inherit;}
 
 /* ---------- App shell: sidebar + topbar ---------- */
 .app-shell{display:flex;height:100vh;overflow:hidden;}
-.app-sidebar{width:236px;flex-shrink:0;background:var(--ink-900);color:#fff;display:flex;flex-direction:column;
+.app-sidebar{width:236px;flex-shrink:0;background:var(--sidebar-bg);color:#fff;display:flex;flex-direction:column;
   transition:width var(--dur-panel) var(--ease-out);}
 .app-sidebar.collapsed{width:72px;}
 .sb-trust{display:flex;align-items:center;gap:10px;padding:18px 16px;border-bottom:1px solid rgba(255,255,255,.08);}
@@ -172,7 +173,7 @@ h4.admin-h{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;
 
 /* ---------- Text size ----------
    Scales the main content area via CSS zoom (well supported in the
-   WebKit browsers this app targets â€” Safari/iPadOS). Sidebar/topbar
+   WebKit browsers this app targets — Safari/iPadOS). Sidebar/topbar
    chrome stays fixed size so navigation doesn't jump around. */
 html[data-text-size="sm"] .app-content{zoom:0.88;}
 html[data-text-size="lg"] .app-content{zoom:1.18;}
