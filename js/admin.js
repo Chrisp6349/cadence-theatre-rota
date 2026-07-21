@@ -10,6 +10,7 @@ import {
   listStaff, saveStaff, deleteStaff,
   updateDepartment
 } from "./department.js";
+import { listUsers, createUserAccount, updateUserRole, revokeUserAccess } from "./users.js";
 
 const DEFAULT_LIST_OPTIONS = ["ROUTINE", "EMERGENCY", "URGENT"];
 
@@ -27,7 +28,14 @@ function formatDate(iso) {
   return `${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()]} ${suffix(d.getDate())} ${d.toLocaleString("en-GB",{month:"long"})} ${d.getFullYear()}`;
 }
 
-export function renderAdmin(container, deptId, dept) {
+function generateTempPassword() {
+  const words = ["harbor","cedar","meadow","copper","willow","quartz","ember","falcon","granite","maple"];
+  const word = words[Math.floor(Math.random() * words.length)];
+  const num = Math.floor(1000 + Math.random() * 9000);
+  return `${word.charAt(0).toUpperCase()}${word.slice(1)}-${num}`;
+}
+
+export function renderAdmin(container, deptId, dept, myUid) {
   // Local working copies — saved back to the department doc as a whole
   // array/object each time something changes, same pattern as the rest
   // of this screen.
@@ -92,6 +100,26 @@ export function renderAdmin(container, deptId, dept) {
           <button class="btn btn-primary btn-sm" type="submit">Add date</button>
         </form>
         <div id="bhList" class="admin-list"></div>
+      </section>
+
+      <section>
+        <h4 class="admin-h">User accounts</h4>
+        <p class="empty-note" style="margin:-6px 0 10px;">Logins for this app — separate from the Staff list above,
+          which is just names shown on the rota. Give the new person their email and temporary password directly.</p>
+        <form id="userForm" class="inline-form">
+          <input type="text" id="userName" placeholder="Full name" required>
+          <input type="email" id="userEmail" placeholder="Email address" required>
+          <input type="text" id="userPassword" placeholder="Temporary password" required>
+          <button class="btn btn-ghost btn-sm" type="button" id="genPasswordBtn">Generate</button>
+          <select id="userRole">
+            <option value="viewer">Viewer</option>
+            <option value="editor">Editor</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button class="btn btn-primary btn-sm" type="submit">Create account</button>
+        </form>
+        <div id="userFormError" class="empty-note" style="display:none;color:var(--status-oncall);"></div>
+        <div id="userList" class="admin-list"></div>
       </section>
     </div>
   `;
@@ -219,8 +247,78 @@ export function renderAdmin(container, deptId, dept) {
     dept.name = deptName;
   });
 
+  // ---- User accounts -----------------------------------------------------
+  const userListEl = container.querySelector("#userList");
+  const userFormError = container.querySelector("#userFormError");
+  const ROLE_LABELS = { viewer: "Viewer", editor: "Editor", admin: "Admin" };
+
+  async function refreshUsers() {
+    const users = (await listUsers(deptId)).sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""));
+    userListEl.innerHTML = users.length ? "" : `<p class="empty-note">No accounts yet.</p>`;
+    users.forEach(u => {
+      const isMe = u.uid === myUid;
+      const row = document.createElement("div");
+      row.className = "admin-row";
+      row.innerHTML = `
+        <span>${u.displayName || u.email}${isMe ? ` <span class="tag-mini">you</span>` : ""}
+          <span class="tag-mini">${u.email}</span>
+        </span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <select data-role-for="${u.uid}" ${isMe ? "disabled title=\"You can't change your own role here\"" : ""}>
+            ${Object.entries(ROLE_LABELS).map(([val, label]) =>
+              `<option value="${val}" ${u.role === val ? "selected" : ""}>${label}</option>`).join("")}
+          </select>
+          <button class="btn btn-ghost btn-sm" data-revoke-for="${u.uid}" ${isMe ? "disabled title=\"You can't revoke your own access\"" : ""}>Revoke access</button>
+        </span>`;
+      row.querySelector("select").addEventListener("change", async (e) => {
+        await updateUserRole(u.uid, e.target.value);
+      });
+      const revokeBtn = row.querySelector("button[data-revoke-for]");
+      revokeBtn.addEventListener("click", async () => {
+        if (!confirm(`Revoke ${u.displayName || u.email}'s access to this department? Their login will no longer work here.`)) return;
+        await revokeUserAccess(u.uid);
+        refreshUsers();
+      });
+      userListEl.appendChild(row);
+    });
+  }
+
+  container.querySelector("#genPasswordBtn").addEventListener("click", () => {
+    container.querySelector("#userPassword").value = generateTempPassword();
+  });
+
+  container.querySelector("#userForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    userFormError.style.display = "none";
+    const displayName = container.querySelector("#userName").value.trim();
+    const email = container.querySelector("#userEmail").value.trim();
+    const password = container.querySelector("#userPassword").value;
+    const role = container.querySelector("#userRole").value;
+    if (!displayName || !email || !password) return;
+
+    const submitBtn = e.target.querySelector("button[type=submit]");
+    submitBtn.disabled = true;
+    try {
+      await createUserAccount({ email, password, displayName, role, departmentId: deptId });
+      e.target.reset();
+      container.querySelector("#userRole").value = "viewer";
+      refreshUsers();
+    } catch (err) {
+      const messages = {
+        "auth/email-already-in-use": "That email already has an account.",
+        "auth/invalid-email": "That doesn't look like a valid email address.",
+        "auth/weak-password": "Password needs to be at least 6 characters."
+      };
+      userFormError.textContent = messages[err.code] || "Couldn't create the account — please try again.";
+      userFormError.style.display = "block";
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
   refreshTheatres();
   refreshStaff();
   refreshListOptions();
   refreshBankHolidays();
+  refreshUsers();
 }
