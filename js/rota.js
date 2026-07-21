@@ -79,7 +79,7 @@ export function renderGrid({ weekStart, dept, theatres, staff, rota, editable, o
         if (type === "odp") hide = u.o.includes(n) && n !== current;
         if (type === "anaes") hide = u.a.includes(n) && n !== current;
       }
-      if (!hide) h += `<option ${current === n ? "selected" : ""}>${n}</option>`;
+      if (!hide) h += `<option title="${n}" ${current === n ? "selected" : ""}>${n}</option>`;
     });
     h += "</select>";
     return h;
@@ -95,6 +95,15 @@ export function renderGrid({ weekStart, dept, theatres, staff, rota, editable, o
 
   function isToday(i) {
     return isoPlusDays(weekStart, i) === new Date().toISOString().split("T")[0];
+  }
+
+  function homeCheckbox(day) {
+    const fkey = `${day}_oncall_home`;
+    const checked = !!rota[fkey];
+    if (!editable) {
+      return checked ? `<span class="home-badge">FROM HOME</span>` : "";
+    }
+    return `<label class="home-check"><input type="checkbox" data-key="${fkey}" data-kind="checkbox" ${checked ? "checked" : ""}> From home</label>`;
   }
 
   function theatreCell(day, theatreId) {
@@ -118,6 +127,7 @@ export function renderGrid({ weekStart, dept, theatres, staff, rota, editable, o
         ${field(d, "oncall_odp", staff.odps, "odp", false)}
         ${field(d, "oncall_extra", dept.extraOnCall || ["", "EXTRA O/C"], "list", false)}
         ${field(d, "oncall_anaes", staff.anaesthetists, "anaes", false)}
+        ${homeCheckbox(d)}
       </td></tr>`;
   });
   h += "</table>";
@@ -141,6 +151,12 @@ export function attachChangeHandlers(container, rota, onChange) {
   container.querySelectorAll("select[data-key]").forEach(sel => {
     sel.addEventListener("change", () => {
       rota[sel.dataset.key] = sel.value;
+      onChange && onChange();
+    });
+  });
+  container.querySelectorAll("input[type=checkbox][data-key]").forEach(cb => {
+    cb.addEventListener("change", () => {
+      rota[cb.dataset.key] = cb.checked;
       onChange && onChange();
     });
   });
