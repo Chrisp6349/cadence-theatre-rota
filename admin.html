@@ -19,7 +19,7 @@
   import { applyTheme } from "./js/theme.js";
   applyTheme();
 
-  const { profile } = await requireSession();
+  const { user, profile } = await requireSession();
   const dept = await getDepartment(profile.departmentId);
   profile.departmentName = dept?.name || "Department";
 
@@ -28,7 +28,7 @@
   if (profile.role !== "admin") {
     content.innerHTML = `<p style="color:var(--ink-500);">This page is only available to admins.</p>`;
   } else {
-    renderAdmin(content, profile.departmentId, dept);
+    renderAdmin(content, profile.departmentId, dept, user.uid);
   }
 </script>
 </body>
