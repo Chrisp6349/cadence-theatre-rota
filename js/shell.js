@@ -2,8 +2,8 @@
 // shell.js
 // Renders the Cadence sidebar + topbar into #shellRoot on every page,
 // with nav items shown/hidden by role. Leave/annual-leave intentionally
-// left out. Insights/Calendar/Staff-profiles are placeholders for a
-// later phase — flagged as "soon" rather than removed from the plan.
+// left out. Insights/Staff-profiles are still placeholders for a later
+// phase; Calendar (On Call Calendar) is implemented.
 // -----------------------------------------------------------------------
 
 import { logout } from "./auth.js";
@@ -11,6 +11,7 @@ import { logout } from "./auth.js";
 const ICONS = {
   dashboard: `<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>`,
   rota: `<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/>`,
+  calendar: `<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>`,
   admin: `<path d="M12 2l8 3v6c0 5-3.4 8.4-8 11-4.6-2.6-8-6-8-11V5l8-3z"/>`,
   settings: `<circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 00.32 1.76"/>`
 };
@@ -24,6 +25,7 @@ const NAV = [
   { section: "Overview" },
   { key: "dashboard", label: "Dashboard", href: "dashboard.html", icon: "dashboard", roles: ["viewer","editor","admin"] },
   { key: "rota", label: "Rota", href: "rota.html", icon: "rota", roles: ["viewer","editor","admin"] },
+  { key: "calendar", label: "On Call Calendar", href: "calendar.html", icon: "calendar", roles: ["viewer","editor","admin"] },
   { section: "System" },
   { key: "admin", label: "Administration", href: "admin.html", icon: "admin", roles: ["admin"] },
 ];
