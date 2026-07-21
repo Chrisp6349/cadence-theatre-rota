@@ -26,7 +26,7 @@
   if (profile.role !== "admin") {
     content.innerHTML = `<p style="color:var(--ink-500);">This page is only available to admins.</p>`;
   } else {
-    renderAdmin(content, profile.departmentId);
+    renderAdmin(content, profile.departmentId, dept);
   }
 </script>
 </body>
