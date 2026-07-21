@@ -1,165 +1,181 @@
-// -----------------------------------------------------------------------
-// rota.js
-// The merged core: one grid, driven by the department's own theatre
-// list, that renders editable (dropdowns) for editors/admins and
-// read-only (plain text) for viewers. This replaces the separate
-// Rota Manager (edit) and Rota Viewer (read-only) apps.
-//
-// Allocation keys keep the old flat-key shape so the data model stays
-// familiar: "<Day>_<theatreId>_odp1", "<Day>_support1", "<Day>_oncall_odp"
-// etc. — but theatreId now comes from the department's own configurable
-// theatre list instead of being hardcoded (t1/t2/t4/t5/cath).
-// -----------------------------------------------------------------------
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cadence — Rota</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/cadence.css">
+<style>
+  .rota-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
+  .rota-toolbar input[type=date]{font-family:var(--font-body);padding:8px 10px;border-radius:var(--r-sm);border:1px solid var(--ink-150);}
+  .rota-toolbar .spacer{flex:1;}
+  .view-badge{font-family:var(--font-mono);font-size:11px;padding:5px 10px;border-radius:var(--r-pill);background:var(--ink-100);color:var(--ink-500);}
+  .view-badge.editing{background:var(--teal-100);color:var(--teal-700);}
+  .table-scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--ink-150);border-radius:var(--r-lg);padding:4px;}
+  table.rota-table{border-collapse:collapse;width:100%;font-size:12.5px;}
+  table.rota-table th{font-family:var(--font-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;
+    color:var(--ink-500);text-align:left;padding:10px 8px;border-bottom:1px solid var(--ink-150);white-space:nowrap;}
+  table.rota-table td{padding:6px 8px;border-bottom:1px solid var(--ink-100);vertical-align:top;}
+  table.rota-table tr.today td{background:var(--teal-50);}
+  table.rota-table td.daycell{font-weight:600;white-space:nowrap;}
+  table.rota-table .bh{color:var(--status-oncall);font-weight:700;font-size:10px;}
+  table.rota-table select{width:100%;min-width:118px;font-family:var(--font-body);font-size:12px;padding:4px;margin-bottom:2px;
+    border:1px solid var(--ink-150);border-radius:4px;}
+  table.rota-table th.theatre-col,table.rota-table th.support-col,table.rota-table th.oncall-col{min-width:130px;}
+  table.rota-table .ro-field{display:block;padding:3px 0;font-size:12.5px;}
+  .weekend-table{margin-top:20px;}
+  h4.section-title{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-500);margin:22px 0 8px;}
+  .home-check{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-500);margin-top:2px;white-space:nowrap;}
+  .home-check input{margin:0;}
+  .home-badge{display:inline-block;font-family:var(--font-mono);font-size:10px;color:var(--teal-700);background:var(--teal-100);
+    padding:2px 6px;border-radius:4px;margin-top:2px;}
 
-import { db, doc, getDoc, setDoc } from "./firebase-init.js";
+  @media print{
+    @page{ size: A4 landscape; margin: 12mm; }
+    #shellRoot .app-sidebar,#shellRoot .app-topbar,.rota-toolbar{display:none !important;}
+    #shellRoot .app-main,#shellRoot .app-content{overflow:visible !important;height:auto !important;padding:0 !important;}
+    body{background:#fff;}
+    .print-header{display:flex !important;}
+    .table-scroll{border:none;overflow:visible;padding:0;}
+    table.rota-table{font-size:10.5px;}
+    table.rota-table th{color:#000;}
+    table.rota-table tr.today td{background:none !important;}
+    h4.section-title{margin-top:14px;}
+    .weekend-table{page-break-inside:avoid;}
+  }
+  .print-header{display:none;align-items:baseline;justify-content:space-between;margin-bottom:14px;
+    border-bottom:2px solid var(--ink-900);padding-bottom:8px;}
+  .print-header .ph-org{font-family:var(--font-display);font-weight:800;font-size:16px;}
+  .print-header .ph-dept{font-size:12px;color:var(--ink-500);margin-top:2px;}
+  .print-header .ph-week{font-family:var(--font-mono);font-size:11px;color:var(--ink-500);text-align:right;}
+</style>
+</head>
+<body>
+<div id="shellRoot"></div>
+<div class="toast" id="toast"></div>
 
-const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-const WEEKENDS = ["Saturday", "Sunday"];
+<script type="module">
+  import { requireSession } from "./js/auth.js";
+  import { renderShell } from "./js/shell.js";
+  import { getDepartment, listTheatres, listStaff, splitStaff } from "./js/department.js";
+  import { loadWeek, saveWeek, mondayOfCurrentWeek, renderGrid, attachChangeHandlers } from "./js/rota.js";
 
-export function mondayOfCurrentWeek() {
-  let d = new Date();
-  let day = (d.getDay() + 6) % 7;
-  d.setDate(d.getDate() - day);
-  return d.toISOString().split("T")[0];
-}
+  const { user, profile } = await requireSession();
+  const dept = await getDepartment(profile.departmentId);
+  profile.departmentName = dept?.name || "Department";
+  const editable = ["editor", "admin"].includes(profile.role);
 
-function suffix(n) {
-  if (n % 100 >= 11 && n % 100 <= 13) return n + "th";
-  switch (n % 10) { case 1: return n + "st"; case 2: return n + "nd"; case 3: return n + "rd"; default: return n + "th"; }
-}
+  const content = renderShell({ profile, activePage: "rota", title: "Rota" });
 
-function isoPlusDays(mondayIso, i) {
-  let d = new Date(mondayIso);
-  d.setDate(d.getDate() + i);
-  return d.toISOString().split("T")[0];
-}
+  content.innerHTML = `
+    <div class="rota-toolbar">
+      <input type="date" id="weekDate">
+      <span class="view-badge ${editable ? "editing" : ""}">${editable ? "Editing" : "Read only"}</span>
+      <div class="spacer"></div>
+      <button class="btn btn-secondary btn-sm" id="printBtn">Print preview</button>
+      ${editable ? `<button class="btn btn-ghost btn-sm" id="clearBtn">Clear week</button>
+                    <button class="btn btn-secondary btn-sm" id="saveDraftBtn">Save draft</button>
+                    <button class="btn btn-primary btn-sm" id="publishBtn">Publish</button>` : ""}
+    </div>
+    <div class="print-header" id="printHeader">
+      <div>
+        <div class="ph-org" id="phOrg"></div>
+        <div class="ph-dept" id="phDept"></div>
+      </div>
+      <div class="ph-week" id="phWeek"></div>
+    </div>
+    <div class="table-scroll"><div id="weekdayGrid"></div></div>
+    <h4 class="section-title">Weekend</h4>
+    <div class="table-scroll"><div id="weekendGrid"></div></div>
+  `;
 
-// ---- Firestore read/write ------------------------------------------------
-export async function loadWeek(deptId, weekStart) {
-  const snap = await getDoc(doc(db, "departments", deptId, "weeks", weekStart));
-  return snap.exists() ? snap.data() : { data: {}, published: false };
-}
+  const theatres = await listTheatres(profile.departmentId);
+  const staffList = await listStaff(profile.departmentId);
+  const staff = splitStaff(staffList);
 
-export async function saveWeek(deptId, weekStart, data, publish, uid) {
-  await setDoc(doc(db, "departments", deptId, "weeks", weekStart), {
-    data,
-    published: !!publish,
-    updatedAt: new Date().toISOString(),
-    updatedBy: uid
-  }, { merge: true });
-}
+  const weekInput = document.getElementById("weekDate");
+  weekInput.value = mondayOfCurrentWeek();
 
-// ---- Grid rendering --------------------------------------------------------
-// `dept`   = department doc (listOptions, extraOnCall, bankHolidays)
-// `theatres` = [{id, name}, ...] in display order
-// `staff`  = { odps: [...], anaesthetists: [...] }
-// `rota`   = the flat key/value object for the week
-// `editable` = true for editor/admin, false for viewer
-export function renderGrid({ weekStart, dept, theatres, staff, rota, editable, onChange }) {
-  function used(day) {
-    let o = [], a = [];
-    Object.entries(rota).forEach(([k, v]) => {
-      if (!k.startsWith(day + "_") || !v || k.includes("oncall") || k.includes("_list")) return;
-      k.includes("_anaes") ? a.push(v) : o.push(v);
-    });
-    return { o, a };
+  let rota = {};
+
+  function toast(msg, isError) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.className = "toast show" + (isError ? " error" : "");
+    setTimeout(() => t.classList.remove("show"), 2400);
   }
 
-  function field(day, key, list, type, restricted = true) {
-    const fkey = `${day}_${key}`;
-    const current = rota[fkey] || "";
-    if (!editable) {
-      return `<span class="ro-field">${current || "—"}</span>`;
+  // Re-renders the grid from the in-memory `rota` object only — no
+  // Firestore round-trip. This is what makes a selection in one theatre
+  // immediately disappear from the other theatres' dropdowns.
+  function renderOnly() {
+    if (!theatres.length) {
+      document.getElementById("weekdayGrid").innerHTML = `<p style="padding:20px;color:var(--ink-500);">
+        No theatres set up yet. ${profile.role === "admin" ? "Add them in Administration." : "Ask your admin to add them."}</p>`;
+      document.getElementById("weekendGrid").innerHTML = "";
+      return;
     }
-    const u = used(day);
-    let h = `<select data-key="${fkey}"><option value=""></option>`;
-    [...list].sort().forEach(n => {
-      let hide = false;
-      if (restricted) {
-        if (type === "odp") hide = u.o.includes(n) && n !== current;
-        if (type === "anaes") hide = u.a.includes(n) && n !== current;
-      }
-      if (!hide) h += `<option title="${n}" ${current === n ? "selected" : ""}>${n}</option>`;
+
+    const { weekdayHtml, weekendHtml } = renderGrid({
+      weekStart: weekInput.value, dept, theatres, staff, rota, editable
     });
-    h += "</select>";
-    return h;
-  }
+    document.getElementById("weekdayGrid").innerHTML = weekdayHtml;
+    document.getElementById("weekendGrid").innerHTML = weekendHtml;
 
-  function dayLabel(i) {
-    const ds = isoPlusDays(weekStart, i);
-    const d = new Date(ds);
-    let txt = `${["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"][i]} ${suffix(d.getDate())}`;
-    if (dept.bankHolidays && dept.bankHolidays[ds]) txt += `<br><span class="bh">BANK HOLIDAY</span>`;
-    return txt;
-  }
-
-  function isToday(i) {
-    return isoPlusDays(weekStart, i) === new Date().toISOString().split("T")[0];
-  }
-
-  function homeCheckbox(day) {
-    const fkey = `${day}_oncall_home`;
-    const checked = !!rota[fkey];
-    if (!editable) {
-      return checked ? `<span class="home-badge">FROM HOME</span>` : "";
+    if (editable) {
+      attachChangeHandlers(document.getElementById("weekdayGrid"), rota, renderOnly);
+      attachChangeHandlers(document.getElementById("weekendGrid"), rota, renderOnly);
     }
-    return `<label class="home-check"><input type="checkbox" data-key="${fkey}" data-kind="checkbox" ${checked ? "checked" : ""}> From home</label>`;
   }
 
-  function theatreCell(day, theatreId) {
-    return field(day, `${theatreId}_odp1`, staff.odps, "odp")
-      + field(day, `${theatreId}_odp2`, staff.odps, "odp")
-      + field(day, `${theatreId}_anaes`, staff.anaesthetists, "anaes")
-      + field(day, `${theatreId}_list`, dept.listOptions || [], "list", false);
+  async function loadAndRender() {
+    const week = await loadWeek(profile.departmentId, weekInput.value);
+    rota = week.data || {};
+    renderOnly();
   }
 
-  const theatreCols = theatres.map(t => `<th class="theatre-col">${t.name}</th>`).join("");
+  weekInput.addEventListener("change", loadAndRender);
 
-  let h = `<table class="rota-table"><tr><th>Day</th>${theatreCols}<th class="support-col">Support</th><th class="oncall-col">On Call</th></tr>`;
-  WEEKDAYS.forEach((d, i) => {
-    const cells = theatres.map(t => `<td>${theatreCell(d, t.id)}</td>`).join("");
-    h += `<tr${isToday(i) ? " class='today'" : ""}><td class="daycell">${dayLabel(i)}</td>${cells}<td>
-        ${field(d, "support1", staff.odps, "odp")}
-        ${field(d, "support2", staff.odps, "odp")}
-        ${field(d, "support3", staff.odps, "odp")}
-        <br>${field(d, "support_list", dept.listOptions || [], "list", false)}
-      </td><td>
-        ${field(d, "oncall_odp", staff.odps, "odp", false)}
-        ${field(d, "oncall_extra", dept.extraOnCall || ["", "EXTRA O/C"], "list", false)}
-        ${field(d, "oncall_anaes", staff.anaesthetists, "anaes", false)}
-        ${homeCheckbox(d)}
-      </td></tr>`;
-  });
-  h += "</table>";
-
-  let w = `<table class="rota-table weekend-table"><tr><th>Day</th><th>On Call ODP</th><th>On Call Anaesthetist</th><th>Waiting List</th></tr>`;
-  WEEKENDS.forEach((d, i) => {
-    w += `<tr${isToday(i + 5) ? " class='today'" : ""}><td class="daycell">${dayLabel(i + 5)}</td>
-      <td>${field(d, "oncall_odp1", staff.odps, "odp", false)}${field(d, "oncall_session1", ["ALL DAY","AM","PM"], "list", false)}<br>
-          ${field(d, "oncall_odp2", staff.odps, "odp", false)}${field(d, "oncall_session2", ["ALL DAY","AM","PM"], "list", false)}</td>
-      <td>${field(d, "oncall_anaes", staff.anaesthetists, "anaes", false)}</td>
-      <td>${field(d, "wl_odp", staff.odps, "odp", false)}${field(d, "wl_anaes", staff.anaesthetists, "anaes", false)}</td>
-    </tr>`;
-  });
-  w += "</table>";
-
-  return { weekdayHtml: h, weekendHtml: w };
-}
-
-export function attachChangeHandlers(container, rota, onChange) {
-  if (!container) return;
-  container.querySelectorAll("select[data-key]").forEach(sel => {
-    sel.addEventListener("change", () => {
-      rota[sel.dataset.key] = sel.value;
-      onChange && onChange();
+  if (editable) {
+    document.getElementById("saveDraftBtn").addEventListener("click", async () => {
+      try { await saveWeek(profile.departmentId, weekInput.value, rota, false, user.uid); toast("Draft saved"); }
+      catch (e) { toast("Couldn't save — try again", true); }
     });
-  });
-  container.querySelectorAll("input[type=checkbox][data-key]").forEach(cb => {
-    cb.addEventListener("change", () => {
-      rota[cb.dataset.key] = cb.checked;
-      onChange && onChange();
+    document.getElementById("publishBtn").addEventListener("click", async () => {
+      try { await saveWeek(profile.departmentId, weekInput.value, rota, true, user.uid); toast("Published"); }
+      catch (e) { toast("Couldn't publish — try again", true); }
     });
-  });
-}
+    document.getElementById("clearBtn").addEventListener("click", () => {
+      if (!confirm("Clear every box in this week's rota? This can't be undone until you save again.")) return;
+      rota = {};
+      renderOnly();
+      toast("Week cleared — remember to save or publish");
+    });
+  }
 
-export { WEEKDAYS, WEEKENDS };
+  // Print preview: swap to the read-only (plain text) rendering so the
+  // printed page shows names, not dropdown boxes, then restore the
+  // editable grid once printing is done or cancelled.
+  document.getElementById("printBtn").addEventListener("click", () => {
+    const { weekdayHtml, weekendHtml } = renderGrid({
+      weekStart: weekInput.value, dept, theatres, staff, rota, editable: false
+    });
+    document.getElementById("weekdayGrid").innerHTML = weekdayHtml;
+    document.getElementById("weekendGrid").innerHTML = weekendHtml;
+
+    document.getElementById("phOrg").textContent = dept.hospitalName || "";
+    document.getElementById("phDept").textContent = dept.name || profile.departmentName || "";
+    const mon = new Date(weekInput.value + "T00:00:00");
+    const fmt = d => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+    document.getElementById("phWeek").textContent = `Week commencing ${fmt(mon)}`;
+
+    window.print();
+  });
+  window.addEventListener("afterprint", renderOnly);
+
+  await loadAndRender();
+</script>
+</body>
+</html>
