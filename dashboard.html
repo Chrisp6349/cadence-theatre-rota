@@ -26,6 +26,21 @@
   .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:8px;}
   .empty-note{color:var(--ink-500);font-size:13.5px;padding:20px 0;}
 
+  .week-nav{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+  .week-nav button{background:var(--surface);border:1px solid var(--ink-150);border-radius:var(--r-sm);
+    padding:7px 12px;font-family:var(--font-body);font-size:12.5px;font-weight:600;color:var(--ink-700);cursor:pointer;}
+  .week-nav button:hover{background:var(--ink-100);}
+  .week-nav-label{font-family:var(--font-mono);font-size:11px;color:var(--ink-500);flex:1;text-align:center;}
+  .week-nav .this-week-btn{color:var(--teal-600);border-color:var(--teal-100);}
+
+  .day-tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:18px;padding-bottom:2px;}
+  .day-tab{flex-shrink:0;background:var(--surface);border:1px solid var(--ink-150);border-radius:var(--r-pill);
+    padding:7px 14px;font-family:var(--font-body);font-size:12px;font-weight:600;color:var(--ink-700);
+    cursor:pointer;white-space:nowrap;}
+  .day-tab:hover{background:var(--ink-100);}
+  .day-tab.active{background:var(--teal-600);color:#fff;border-color:var(--teal-600);}
+  .day-tab.is-today:not(.active){border-color:var(--teal-500);color:var(--teal-700);}
+
   .myweek-card{margin-top:24px;}
   .myweek-select-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
   .myweek-select-row select{font-family:var(--font-body);font-size:13.5px;padding:9px 12px;border-radius:var(--r-sm);
@@ -58,69 +73,21 @@
 
   const theatres = await listTheatres(profile.departmentId);
   const staffList = await listStaff(profile.departmentId);
-  const week = await loadWeek(profile.departmentId, mondayOfCurrentWeek());
-  const rota = week.data || {};
 
-  const now = new Date();
-  const todayIso = now.toISOString().split("T")[0];
-  const today = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][now.getDay()];
-  const isWeekend = today === "Saturday" || today === "Sunday";
-
-  function theatreInfo(t) {
-    const odp1 = rota[`${today}_${t.id}_odp1`] || "";
-    const odp2 = rota[`${today}_${t.id}_odp2`] || "";
-    const anaes = rota[`${today}_${t.id}_anaes`] || "";
-    const listType = rota[`${today}_${t.id}_list`] || "";
-    const hasList = !!(odp1 || odp2 || anaes);
-    let status = "available";
-    if (hasList) status = (listType.includes("MAINTENANCE") || listType.includes("NO LIST")) ? "closed" : "inlist";
-    return { odp1, odp2, anaes, listType, status };
-  }
-
-  const theatreCardsHtml = theatres.length
-    ? theatres.map(t => {
-        const info = theatreInfo(t);
-        const rows = [info.odp1, info.odp2, info.anaes].filter(Boolean)
-          .map(n => `<div class="tc-row">${n}</div>`).join("");
-        return `<div class="theatre-card">
-          <div class="tc-head">
-            <span class="dot ${info.status}"></span>
-            <span class="tc-name">${t.name}</span>
-            ${info.listType ? `<span class="tc-list">${info.listType}</span>` : ""}
-          </div>
-          ${rows || `<div class="tc-empty">No allocation</div>`}
-        </div>`;
-      }).join("")
-    : `<span class="empty-note">No theatres configured yet — add them in Administration.</span>`;
-
-  const sessionsToday = theatres.filter(t => theatreInfo(t).status === "inlist").length;
-
-  // On-call keys differ between the weekday grid and the weekend grid
-  // (see rota.js renderGrid) — pick the right ones for today.
-  let onCallOdp, onCallAnaes, onCallHome;
-  if (isWeekend) {
-    const odp1 = rota[`${today}_oncall_odp1`], sess1 = rota[`${today}_oncall_session1`];
-    const odp2 = rota[`${today}_oncall_odp2`], sess2 = rota[`${today}_oncall_session2`];
-    onCallOdp = [odp1 && `${odp1}${sess1 ? " (" + sess1 + ")" : ""}`, odp2 && `${odp2}${sess2 ? " (" + sess2 + ")" : ""}`]
-      .filter(Boolean).join(", ") || "—";
-    onCallAnaes = rota[`${today}_oncall_anaes`] || "—";
-    onCallHome = false;
-  } else {
-    onCallOdp = rota[`${today}_oncall_odp`] || "—";
-    onCallAnaes = rota[`${today}_oncall_anaes`] || "—";
-    onCallHome = !!rota[`${today}_oncall_home`];
-  }
-
-  const bhBanner = (dept.bankHolidays && dept.bankHolidays[todayIso])
-    ? `<div class="bh-banner">Today is a bank holiday</div>` : "";
-
-  // ---- My Week -----------------------------------------------------------
-  // Remembers the chosen name per department, on this device, in
-  // localStorage — no Firestore write needed (viewers can't write their
-  // own /users doc under the current rules), so this works for every role.
-  const MYWEEK_KEY = `cadence_myweek_${profile.departmentId}`;
   const ALL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const todayIso = new Date().toISOString().split("T")[0];
+  const todayName = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date().getDay()];
 
+  // ---- State: which week and which day within it is on screen -----------
+  let weekOffset = 0;              // 0 = this week, +1 = next week, -1 = previous week, etc.
+  let selectedDayIdx = ALL_DAYS.indexOf(todayName); // stays on the same weekday when you flip weeks
+  let rota = {};
+
+  function weekStartIso(offset) {
+    const d = new Date(mondayOfCurrentWeek() + "T00:00:00");
+    d.setDate(d.getDate() + offset * 7);
+    return d.toISOString().split("T")[0];
+  }
   function isoPlusDays(mondayIso, i) {
     const d = new Date(mondayIso + "T00:00:00");
     d.setDate(d.getDate() + i);
@@ -129,6 +96,32 @@
   function shortDate(d) {
     return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
   }
+  function longDate(d) {
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  }
+
+  async function loadRota() {
+    const week = await loadWeek(profile.departmentId, weekStartIso(weekOffset));
+    rota = week.data || {};
+  }
+
+  // ---- Theatre status (for the currently selected day) -------------------
+  function theatreInfo(day, t) {
+    const odp1 = rota[`${day}_${t.id}_odp1`] || "";
+    const odp2 = rota[`${day}_${t.id}_odp2`] || "";
+    const anaes = rota[`${day}_${t.id}_anaes`] || "";
+    const listType = rota[`${day}_${t.id}_list`] || "";
+    const hasList = !!(odp1 || odp2 || anaes);
+    let status = "available";
+    if (hasList) status = (listType.includes("MAINTENANCE") || listType.includes("NO LIST")) ? "closed" : "inlist";
+    return { odp1, odp2, anaes, listType, status };
+  }
+
+  // ---- My Week -------------------------------------------------------------
+  // Remembers the chosen name per department, on this device, in
+  // localStorage — no Firestore write needed (viewers can't write their
+  // own /users doc under the current rules), so this works for every role.
+  const MYWEEK_KEY = `cadence_myweek_${profile.departmentId}`;
 
   // Turns "<theatreId>_odp1" / "_anaes" / "support1" / "oncall_odp" etc.
   // into a human label, or null if this key isn't a person-placement field
@@ -165,7 +158,7 @@
 
   function renderMyWeekResult(name) {
     const dayCards = ALL_DAYS.map((day, i) => {
-      const d = isoPlusDays(mondayOfCurrentWeek(), i);
+      const d = isoPlusDays(weekStartIso(weekOffset), i);
       const isDayToday = d.toISOString().split("T")[0] === todayIso;
       const placements = placementsForDay(day, name);
       const body = placements.length
@@ -217,20 +210,109 @@
     }
   }
 
-  content.innerHTML = `
-    ${bhBanner}
-    <div class="strip-label">Live theatre status — ${today}</div>
-    <div class="theatre-grid">${theatreCardsHtml}</div>
-    <div class="stat-grid">
-      <div class="card"><div class="card-label">Sessions today</div><div class="card-value">${sessionsToday} / ${theatres.length}</div></div>
-      <div class="card"><div class="card-label">On call ODP</div><div class="card-value" style="font-size:20px;">${onCallOdp}${onCallHome ? ` <span class="tc-list" style="font-size:9px;">FROM HOME</span>` : ""}</div></div>
-      <div class="card"><div class="card-label">On call anaesthetist</div><div class="card-value" style="font-size:20px;">${onCallAnaes}</div></div>
-    </div>
-    <div class="strip-label myweek-card">My Week</div>
-    <div class="card" id="myweekCard"></div>
-  `;
+  // ---- Main render ---------------------------------------------------------
+  function render() {
+    const day = ALL_DAYS[selectedDayIdx];
+    const isWeekend = day === "Saturday" || day === "Sunday";
+    const dayIso = isoPlusDays(weekStartIso(weekOffset), selectedDayIdx).toISOString().split("T")[0];
+    const isActualToday = dayIso === todayIso;
 
-  initMyWeek();
+    // Week nav
+    const weekLabel = `Week commencing ${longDate(isoPlusDays(weekStartIso(weekOffset), 0))}`;
+    const weekNavHtml = `
+      <div class="week-nav">
+        <button id="prevWeekBtn">‹ Previous week</button>
+        <span class="week-nav-label">${weekLabel}</span>
+        ${weekOffset !== 0 ? `<button class="this-week-btn" id="thisWeekBtn">This week</button>` : ""}
+        <button id="nextWeekBtn">Next week ›</button>
+      </div>
+    `;
+
+    // Day tabs
+    const dayTabsHtml = `<div class="day-tabs">${ALL_DAYS.map((d, i) => {
+      const iso = isoPlusDays(weekStartIso(weekOffset), i).toISOString().split("T")[0];
+      const isTabToday = iso === todayIso;
+      return `<button class="day-tab${i === selectedDayIdx ? " active" : ""}${isTabToday ? " is-today" : ""}" data-day-idx="${i}">
+        ${d.slice(0, 3)} ${shortDate(isoPlusDays(weekStartIso(weekOffset), i))}
+      </button>`;
+    }).join("")}</div>`;
+
+    // Theatre grid for the selected day
+    const theatreCardsHtml = theatres.length
+      ? theatres.map(t => {
+          const info = theatreInfo(day, t);
+          const rows = [info.odp1, info.odp2, info.anaes].filter(Boolean)
+            .map(n => `<div class="tc-row">${n}</div>`).join("");
+          return `<div class="theatre-card">
+            <div class="tc-head">
+              <span class="dot ${info.status}"></span>
+              <span class="tc-name">${t.name}</span>
+              ${info.listType ? `<span class="tc-list">${info.listType}</span>` : ""}
+            </div>
+            ${rows || `<div class="tc-empty">No allocation</div>`}
+          </div>`;
+        }).join("")
+      : `<span class="empty-note">No theatres configured yet — add them in Administration.</span>`;
+
+    const sessionsCount = theatres.filter(t => theatreInfo(day, t).status === "inlist").length;
+
+    // On-call keys differ between the weekday grid and the weekend grid
+    // (see rota.js renderGrid) — pick the right ones for the selected day.
+    let onCallOdp, onCallAnaes, onCallHome;
+    if (isWeekend) {
+      const odp1 = rota[`${day}_oncall_odp1`], sess1 = rota[`${day}_oncall_session1`];
+      const odp2 = rota[`${day}_oncall_odp2`], sess2 = rota[`${day}_oncall_session2`];
+      onCallOdp = [odp1 && `${odp1}${sess1 ? " (" + sess1 + ")" : ""}`, odp2 && `${odp2}${sess2 ? " (" + sess2 + ")" : ""}`]
+        .filter(Boolean).join(", ") || "—";
+      onCallAnaes = rota[`${day}_oncall_anaes`] || "—";
+      onCallHome = false;
+    } else {
+      onCallOdp = rota[`${day}_oncall_odp`] || "—";
+      onCallAnaes = rota[`${day}_oncall_anaes`] || "—";
+      onCallHome = !!rota[`${day}_oncall_home`];
+    }
+
+    const bhBanner = (dept.bankHolidays && dept.bankHolidays[dayIso])
+      ? `<div class="bh-banner">${isActualToday ? "Today" : day} is a bank holiday</div>` : "";
+
+    content.innerHTML = `
+      ${weekNavHtml}
+      ${dayTabsHtml}
+      ${bhBanner}
+      <div class="strip-label">Live theatre status — ${day}${isActualToday ? " (today)" : ""}</div>
+      <div class="theatre-grid">${theatreCardsHtml}</div>
+      <div class="stat-grid">
+        <div class="card"><div class="card-label">Sessions</div><div class="card-value">${sessionsCount} / ${theatres.length}</div></div>
+        <div class="card"><div class="card-label">On call ODP</div><div class="card-value" style="font-size:20px;">${onCallOdp}${onCallHome ? ` <span class="tc-list" style="font-size:9px;">FROM HOME</span>` : ""}</div></div>
+        <div class="card"><div class="card-label">On call anaesthetist</div><div class="card-value" style="font-size:20px;">${onCallAnaes}</div></div>
+      </div>
+      <div class="strip-label myweek-card">My Week</div>
+      <div class="card" id="myweekCard"></div>
+    `;
+
+    document.getElementById("prevWeekBtn").addEventListener("click", () => changeWeek(-1));
+    document.getElementById("nextWeekBtn").addEventListener("click", () => changeWeek(1));
+    const thisWeekBtn = document.getElementById("thisWeekBtn");
+    if (thisWeekBtn) thisWeekBtn.addEventListener("click", () => changeWeek(0, true));
+    document.querySelectorAll(".day-tab").forEach(btn => {
+      btn.addEventListener("click", () => {
+        selectedDayIdx = Number(btn.dataset.dayIdx);
+        render();
+      });
+    });
+
+    initMyWeek();
+  }
+
+  async function changeWeek(delta, jumpToThisWeek) {
+    weekOffset = jumpToThisWeek ? 0 : weekOffset + delta;
+    if (jumpToThisWeek) selectedDayIdx = ALL_DAYS.indexOf(todayName);
+    await loadRota();
+    render();
+  }
+
+  await loadRota();
+  render();
 </script>
 </body>
 </html>
