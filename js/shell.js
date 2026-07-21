@@ -7,13 +7,17 @@
 // -----------------------------------------------------------------------
 
 import { logout } from "./auth.js";
+import { initThemeControls } from "./theme.js";
 
 const ICONS = {
   dashboard: `<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>`,
   rota: `<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/>`,
   calendar: `<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>`,
   admin: `<path d="M12 2l8 3v6c0 5-3.4 8.4-8 11-4.6-2.6-8-6-8-11V5l8-3z"/>`,
-  settings: `<circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 00.32 1.76"/>`
+  settings: `<circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 00.32 1.76"/>`,
+  moon: `<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>`,
+  minus: `<path d="M5 12h14"/>`,
+  plus: `<path d="M12 5v14M5 12h14"/>`
 };
 
 function iconSvg(key){
@@ -68,7 +72,15 @@ export function renderShell({ profile, activePage, title }) {
         </div>
       </aside>
       <div class="app-main">
-        <div class="app-topbar"><h3>${title}</h3></div>
+        <div class="app-topbar">
+          <h3>${title}</h3>
+          <div class="topbar-right">
+            <button class="icon-btn" id="textSizeDownBtn" title="Smaller text">${iconSvg("minus")}</button>
+            <span class="text-size-label" id="textSizeLabel">M</span>
+            <button class="icon-btn" id="textSizeUpBtn" title="Larger text">${iconSvg("plus")}</button>
+            <button class="icon-btn" id="darkModeBtn" title="Toggle dark mode">${iconSvg("moon")}</button>
+          </div>
+        </div>
         <div class="app-content" id="pageContent"></div>
       </div>
     </div>
@@ -78,6 +90,7 @@ export function renderShell({ profile, activePage, title }) {
     document.getElementById("sidebar").classList.toggle("collapsed");
   });
   document.getElementById("logoutBtn").addEventListener("click", logout);
+  initThemeControls(root);
 
   return document.getElementById("pageContent");
 }
