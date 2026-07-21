@@ -22,7 +22,7 @@
   table.rota-table td.daycell{font-weight:600;white-space:nowrap;}
   table.rota-table .bh{color:var(--status-oncall);font-weight:700;font-size:10px;}
   table.rota-table select{width:100%;min-width:118px;font-family:var(--font-body);font-size:12px;padding:4px;margin-bottom:2px;
-    border:1px solid var(--ink-150);border-radius:4px;}
+    border:1px solid var(--ink-150);border-radius:4px;background:var(--surface);color:var(--ink-900);}
   table.rota-table th.theatre-col,table.rota-table th.support-col,table.rota-table th.oncall-col{min-width:130px;}
   table.rota-table .ro-field{display:block;padding:3px 0;font-size:12.5px;}
   .weekend-table{margin-top:20px;}
@@ -47,6 +47,7 @@
   }
   .print-header{display:none;align-items:baseline;justify-content:space-between;margin-bottom:14px;
     border-bottom:2px solid var(--ink-900);padding-bottom:8px;}
+  .print-header.force-show{display:flex;}
   .print-header .ph-org{font-family:var(--font-display);font-weight:800;font-size:16px;}
   .print-header .ph-dept{font-size:12px;color:var(--ink-500);margin-top:2px;}
   .print-header .ph-week{font-family:var(--font-mono);font-size:11px;color:var(--ink-500);text-align:right;}
@@ -61,6 +62,8 @@
   import { renderShell } from "./js/shell.js";
   import { getDepartment, listTheatres, listStaff, splitStaff } from "./js/department.js";
   import { loadWeek, saveWeek, mondayOfCurrentWeek, renderGrid, attachChangeHandlers } from "./js/rota.js";
+  import { applyTheme } from "./js/theme.js";
+  applyTheme();
 
   const { user, profile } = await requireSession();
   const dept = await getDepartment(profile.departmentId);
@@ -74,10 +77,13 @@
       <input type="date" id="weekDate">
       <span class="view-badge ${editable ? "editing" : ""}">${editable ? "Editing" : "Read only"}</span>
       <div class="spacer"></div>
+      <button class="btn btn-secondary btn-sm" id="fullWeekBtn">Full week view</button>
       <button class="btn btn-secondary btn-sm" id="printBtn">Print preview</button>
-      ${editable ? `<button class="btn btn-ghost btn-sm" id="clearBtn">Clear week</button>
-                    <button class="btn btn-secondary btn-sm" id="saveDraftBtn">Save draft</button>
-                    <button class="btn btn-primary btn-sm" id="publishBtn">Publish</button>` : ""}
+      <span id="editButtons">
+        ${editable ? `<button class="btn btn-ghost btn-sm" id="clearBtn">Clear week</button>
+                      <button class="btn btn-secondary btn-sm" id="saveDraftBtn">Save draft</button>
+                      <button class="btn btn-primary btn-sm" id="publishBtn">Publish</button>` : ""}
+      </span>
     </div>
     <div class="print-header" id="printHeader">
       <div>
@@ -99,6 +105,7 @@
   weekInput.value = mondayOfCurrentWeek();
 
   let rota = {};
+  let previewMode = false; // Full week view: read-only, print-styled, on screen
 
   function toast(msg, isError) {
     const t = document.getElementById("toast");
@@ -107,10 +114,24 @@
     setTimeout(() => t.classList.remove("show"), 2400);
   }
 
+  function updatePrintHeader() {
+    document.getElementById("phOrg").textContent = dept.hospitalName || "";
+    document.getElementById("phDept").textContent = dept.name || profile.departmentName || "";
+    const mon = new Date(weekInput.value + "T00:00:00");
+    const fmt = d => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+    document.getElementById("phWeek").textContent = `Week commencing ${fmt(mon)}`;
+  }
+
   // Re-renders the grid from the in-memory `rota` object only — no
   // Firestore round-trip. This is what makes a selection in one theatre
   // immediately disappear from the other theatres' dropdowns.
   function renderOnly() {
+    const showEditable = editable && !previewMode;
+
+    document.getElementById("printHeader").classList.toggle("force-show", previewMode);
+    document.getElementById("editButtons").style.display = previewMode ? "none" : "";
+    if (previewMode) updatePrintHeader();
+
     if (!theatres.length) {
       document.getElementById("weekdayGrid").innerHTML = `<p style="padding:20px;color:var(--ink-500);">
         No theatres set up yet. ${profile.role === "admin" ? "Add them in Administration." : "Ask your admin to add them."}</p>`;
@@ -119,12 +140,12 @@
     }
 
     const { weekdayHtml, weekendHtml } = renderGrid({
-      weekStart: weekInput.value, dept, theatres, staff, rota, editable
+      weekStart: weekInput.value, dept, theatres, staff, rota, editable: showEditable
     });
     document.getElementById("weekdayGrid").innerHTML = weekdayHtml;
     document.getElementById("weekendGrid").innerHTML = weekendHtml;
 
-    if (editable) {
+    if (showEditable) {
       attachChangeHandlers(document.getElementById("weekdayGrid"), rota, renderOnly);
       attachChangeHandlers(document.getElementById("weekendGrid"), rota, renderOnly);
     }
@@ -155,22 +176,23 @@
     });
   }
 
+  document.getElementById("fullWeekBtn").addEventListener("click", (e) => {
+    previewMode = !previewMode;
+    e.target.textContent = previewMode ? "Back to editing" : "Full week view";
+    renderOnly();
+  });
+
   // Print preview: swap to the read-only (plain text) rendering so the
-  // printed page shows names, not dropdown boxes, then restore the
-  // editable grid once printing is done or cancelled.
+  // printed page shows names, not dropdown boxes, then restore whatever
+  // was on screen (editing or Full week view) once printing is done.
   document.getElementById("printBtn").addEventListener("click", () => {
     const { weekdayHtml, weekendHtml } = renderGrid({
       weekStart: weekInput.value, dept, theatres, staff, rota, editable: false
     });
     document.getElementById("weekdayGrid").innerHTML = weekdayHtml;
     document.getElementById("weekendGrid").innerHTML = weekendHtml;
-
-    document.getElementById("phOrg").textContent = dept.hospitalName || "";
-    document.getElementById("phDept").textContent = dept.name || profile.departmentName || "";
-    const mon = new Date(weekInput.value + "T00:00:00");
-    const fmt = d => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
-    document.getElementById("phWeek").textContent = `Week commencing ${fmt(mon)}`;
-
+    updatePrintHeader();
+    document.getElementById("printHeader").classList.add("force-show");
     window.print();
   });
   window.addEventListener("afterprint", renderOnly);
