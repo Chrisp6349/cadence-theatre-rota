@@ -11,7 +11,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
-  collection, getDocs, query, orderBy, onSnapshot, serverTimestamp
+  collection, getDocs, query, where, orderBy, onSnapshot, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 import { firebaseConfig } from "./firebase-config.js";
@@ -23,5 +23,5 @@ export const db = getFirestore(app);
 export {
   onAuthStateChanged, signInWithEmailAndPassword, signOut,
   doc, getDoc, setDoc, updateDoc, deleteDoc,
-  collection, getDocs, query, orderBy, onSnapshot, serverTimestamp
+  collection, getDocs, query, where, orderBy, onSnapshot, serverTimestamp
 };
