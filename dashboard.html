@@ -75,18 +75,39 @@
   const staffList = await listStaff(profile.departmentId);
 
   const ALL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-  const todayIso = new Date().toISOString().split("T")[0];
+  // Formats a Date using its LOCAL year/month/day — never .toISOString(),
+  // which converts to UTC first and silently shifts the date back by one
+  // during British Summer Time (UTC+1). Every date-to-string conversion
+  // on this page goes through this function.
+  function localIso(d) {
+    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  const todayIso = localIso(new Date());
   const todayName = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date().getDay()];
 
   // ---- State: which week and which day within it is on screen -----------
+  // If we arrived via a link from calendar.html (?week=<mondayIso>&day=<0-6>),
+  // start there instead of the current week/today.
+  const params = new URLSearchParams(window.location.search);
+  const linkedWeek = params.get("week");
+  const linkedDay = params.get("day");
+
   let weekOffset = 0;              // 0 = this week, +1 = next week, -1 = previous week, etc.
   let selectedDayIdx = ALL_DAYS.indexOf(todayName); // stays on the same weekday when you flip weeks
   let rota = {};
 
+  if (linkedWeek) {
+    const currentMonday = new Date(mondayOfCurrentWeek() + "T00:00:00");
+    const linkedMonday = new Date(linkedWeek + "T00:00:00");
+    weekOffset = Math.round((linkedMonday - currentMonday) / (7 * 86400000));
+    if (linkedDay !== null && !isNaN(Number(linkedDay))) selectedDayIdx = Number(linkedDay);
+  }
+
   function weekStartIso(offset) {
     const d = new Date(mondayOfCurrentWeek() + "T00:00:00");
     d.setDate(d.getDate() + offset * 7);
-    return d.toISOString().split("T")[0];
+    return localIso(d);
   }
   function isoPlusDays(mondayIso, i) {
     const d = new Date(mondayIso + "T00:00:00");
@@ -159,7 +180,7 @@
   function renderMyWeekResult(name) {
     const dayCards = ALL_DAYS.map((day, i) => {
       const d = isoPlusDays(weekStartIso(weekOffset), i);
-      const isDayToday = d.toISOString().split("T")[0] === todayIso;
+      const isDayToday = localIso(d) === todayIso;
       const placements = placementsForDay(day, name);
       const body = placements.length
         ? placements.map(p => `<div class="md-role">${p}</div>`).join("")
@@ -214,7 +235,7 @@
   function render() {
     const day = ALL_DAYS[selectedDayIdx];
     const isWeekend = day === "Saturday" || day === "Sunday";
-    const dayIso = isoPlusDays(weekStartIso(weekOffset), selectedDayIdx).toISOString().split("T")[0];
+    const dayIso = localIso(isoPlusDays(weekStartIso(weekOffset), selectedDayIdx));
     const isActualToday = dayIso === todayIso;
 
     // Week nav
@@ -230,7 +251,7 @@
 
     // Day tabs
     const dayTabsHtml = `<div class="day-tabs">${ALL_DAYS.map((d, i) => {
-      const iso = isoPlusDays(weekStartIso(weekOffset), i).toISOString().split("T")[0];
+      const iso = localIso(isoPlusDays(weekStartIso(weekOffset), i));
       const isTabToday = iso === todayIso;
       return `<button class="day-tab${i === selectedDayIdx ? " active" : ""}${isTabToday ? " is-today" : ""}" data-day-idx="${i}">
         ${d.slice(0, 3)} ${shortDate(isoPlusDays(weekStartIso(weekOffset), i))}
