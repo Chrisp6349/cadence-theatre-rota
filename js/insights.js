@@ -34,8 +34,9 @@ async function listPublishedWeeks(deptId) {
 
 // Same key-shape knowledge as rota.js/dashboard.html — turns a
 // "<theatreId>_odp1" / "_anaes" / "support1" / "oncall_odp" etc. suffix
-// into a structured type instead of a display label.
-function classify(suffix, theatres) {
+// into a structured type instead of a display label. Exported because
+// staff.html (Staff Profiles) reuses this against the same entry shape.
+export function classify(suffix, theatres) {
   if (/_odp[12]$/.test(suffix)) {
     const theatreId = suffix.replace(/_odp[12]$/, "");
     const t = theatres.find(x => x.id === theatreId);
@@ -44,7 +45,8 @@ function classify(suffix, theatres) {
   }
   if (suffix.endsWith("_anaes")) {
     const theatreId = suffix.replace(/_anaes$/, "");
-    if (theatreId === "oncall" || theatreId === "wl") return null; // on-call/waiting-list anaesthetist — not counted here
+    if (theatreId === "oncall") return { kind: "oncall_anaes" };
+    if (theatreId === "wl") return null; // weekend waiting-list anaesthetist — not counted
     const t = theatres.find(x => x.id === theatreId);
     if (t) return { kind: "theatre_anaes", theatreId, theatreName: t.name };
     return null;
@@ -71,37 +73,47 @@ function collectEntries(weeksData, currentWeekStart, todayIso) {
   return entries;
 }
 
-function buildStats(entries, theatres) {
-  // Group theatre_odp/theatre_anaes entries by (week, day, theatre) so we
-  // can tell "a session happened here" apart from "two separate fields
-  // happened to both be filled in", and so pairings are only counted
-  // within the same session.
+// Groups theatre_odp/theatre_anaes entries by (week, day, theatre) so
+// callers can tell "a session happened here" apart from "two separate
+// fields happened to both be filled in" — and so pairings only count
+// within the same session. Shared by Theatre Intelligence and Staff
+// Profiles so both agree on what counts as one session.
+export function buildSessionGroups(entries, theatres) {
   const groups = {};
-  const onCallCounts = {};
-  const supportCounts = {};
-
   entries.forEach(({ weekStart, day, suffix, value }) => {
     const c = classify(suffix, theatres);
-    if (!c) return;
-    if (c.kind === "theatre_odp" || c.kind === "theatre_anaes") {
-      const gk = `${weekStart}|${day}|${c.theatreId}`;
-      if (!groups[gk]) groups[gk] = { day, theatreName: c.theatreName, odps: [], anaes: null };
-      if (c.kind === "theatre_odp") groups[gk].odps.push(value);
-      else groups[gk].anaes = value;
-    } else if (c.kind === "oncall_odp") {
-      onCallCounts[value] = (onCallCounts[value] || 0) + 1;
-    } else if (c.kind === "support") {
-      supportCounts[value] = (supportCounts[value] || 0) + 1;
-    }
+    if (!c || (c.kind !== "theatre_odp" && c.kind !== "theatre_anaes")) return;
+    const gk = `${weekStart}|${day}|${c.theatreId}`;
+    if (!groups[gk]) groups[gk] = { weekStart, day, theatreName: c.theatreName, odps: [], anaes: null };
+    if (c.kind === "theatre_odp") groups[gk].odps.push(value);
+    else groups[gk].anaes = value;
+  });
+  return Object.values(groups);
+}
+
+// Fetches and flattens the published rota history once. Both Theatre
+// Intelligence and Staff Profiles start from this same call.
+export async function loadEligibleEntries(deptId, theatres, currentWeekStart, todayIso) {
+  const weeksData = await listPublishedWeeks(deptId);
+  const eligibleWeeks = weeksData.filter(w => w.weekStart <= currentWeekStart);
+  return { entries: collectEntries(eligibleWeeks, currentWeekStart, todayIso), weeksUsed: eligibleWeeks.length };
+}
+
+function buildStats(entries, theatres) {
+  const onCallCounts = {};
+  const supportCounts = {};
+  entries.forEach(({ suffix, value }) => {
+    const c = classify(suffix, theatres);
+    if (c?.kind === "oncall_odp") onCallCounts[value] = (onCallCounts[value] || 0) + 1;
+    else if (c?.kind === "support") supportCounts[value] = (supportCounts[value] || 0) + 1;
   });
 
   const theatreCounts = {};
   const dayCounts = {};
   const pairingCounts = {};
-  let totalSessions = 0;
+  const sessionGroups = buildSessionGroups(entries, theatres);
 
-  Object.values(groups).forEach(g => {
-    totalSessions++;
+  sessionGroups.forEach(g => {
     theatreCounts[g.theatreName] = (theatreCounts[g.theatreName] || 0) + 1;
     dayCounts[g.day] = (dayCounts[g.day] || 0) + 1;
     if (g.anaes) {
@@ -112,7 +124,7 @@ function buildStats(entries, theatres) {
     }
   });
 
-  return { totalSessions, theatreCounts, dayCounts, onCallCounts, supportCounts, pairingCounts };
+  return { totalSessions: sessionGroups.length, theatreCounts, dayCounts, onCallCounts, supportCounts, pairingCounts };
 }
 
 function topPick(map, minCount = 2) {
@@ -158,14 +170,12 @@ function shuffle(arr) {
 }
 
 // Fetches history once and returns both a ready-made set of facts and a
-// `pickAgain()` function that re-shuffles the SAME data for a "Shuffle"
+// `pickFacts()` function that re-shuffles the SAME data for a "Shuffle"
 // button — no need to hit Firestore again just to see different facts.
 export async function loadTheatreIntelligence(deptId, theatres, currentWeekStart, todayIso) {
-  const weeksData = await listPublishedWeeks(deptId);
-  const eligibleWeeks = weeksData.filter(w => w.weekStart <= currentWeekStart);
-  const entries = collectEntries(eligibleWeeks, currentWeekStart, todayIso);
+  const { entries, weeksUsed } = await loadEligibleEntries(deptId, theatres, currentWeekStart, todayIso);
   const stats = buildStats(entries, theatres);
-  const pool = buildFactPool(stats, eligibleWeeks.length);
+  const pool = buildFactPool(stats, weeksUsed);
 
   return {
     hasData: pool.length > 0,
