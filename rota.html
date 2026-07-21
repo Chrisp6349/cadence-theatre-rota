@@ -21,11 +21,27 @@
   table.rota-table tr.today td{background:var(--teal-50);}
   table.rota-table td.daycell{font-weight:600;white-space:nowrap;}
   table.rota-table .bh{color:var(--status-oncall);font-weight:700;font-size:10px;}
-  table.rota-table select{width:100%;font-family:var(--font-body);font-size:12px;padding:4px;margin-bottom:2px;
+  table.rota-table select{width:100%;min-width:118px;font-family:var(--font-body);font-size:12px;padding:4px;margin-bottom:2px;
     border:1px solid var(--ink-150);border-radius:4px;}
+  table.rota-table th.theatre-col,table.rota-table th.support-col,table.rota-table th.oncall-col{min-width:130px;}
   table.rota-table .ro-field{display:block;padding:3px 0;font-size:12.5px;}
   .weekend-table{margin-top:20px;}
   h4.section-title{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-500);margin:22px 0 8px;}
+  .home-check{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-500);margin-top:2px;white-space:nowrap;}
+  .home-check input{margin:0;}
+  .home-badge{display:inline-block;font-family:var(--font-mono);font-size:10px;color:var(--teal-700);background:var(--teal-100);
+    padding:2px 6px;border-radius:4px;margin-top:2px;}
+
+  @media print{
+    #shellRoot .app-sidebar,#shellRoot .app-topbar,.rota-toolbar{display:none !important;}
+    #shellRoot .app-main,#shellRoot .app-content{overflow:visible !important;height:auto !important;padding:0 !important;}
+    body{background:#fff;}
+    .table-scroll{border:none;overflow:visible;}
+    table.rota-table{font-size:10.5px;}
+    table.rota-table th{color:#000;}
+    h4.section-title{margin-top:14px;}
+    .weekend-table{page-break-inside:avoid;}
+  }
 </style>
 </head>
 <body>
@@ -50,7 +66,9 @@
       <input type="date" id="weekDate">
       <span class="view-badge ${editable ? "editing" : ""}">${editable ? "Editing" : "Read only"}</span>
       <div class="spacer"></div>
-      ${editable ? `<button class="btn btn-secondary btn-sm" id="saveDraftBtn">Save draft</button>
+      <button class="btn btn-secondary btn-sm" id="printBtn">Print preview</button>
+      ${editable ? `<button class="btn btn-ghost btn-sm" id="clearBtn">Clear week</button>
+                    <button class="btn btn-secondary btn-sm" id="saveDraftBtn">Save draft</button>
                     <button class="btn btn-primary btn-sm" id="publishBtn">Publish</button>` : ""}
     </div>
     <div class="table-scroll"><div id="weekdayGrid"></div></div>
@@ -74,10 +92,10 @@
     setTimeout(() => t.classList.remove("show"), 2400);
   }
 
-  async function loadAndRender() {
-    const week = await loadWeek(profile.departmentId, weekInput.value);
-    rota = week.data || {};
-
+  // Re-renders the grid from the in-memory `rota` object only — no
+  // Firestore round-trip. This is what makes a selection in one theatre
+  // immediately disappear from the other theatres' dropdowns.
+  function renderOnly() {
     if (!theatres.length) {
       document.getElementById("weekdayGrid").innerHTML = `<p style="padding:20px;color:var(--ink-500);">
         No theatres set up yet. ${profile.role === "admin" ? "Add them in Administration." : "Ask your admin to add them."}</p>`;
@@ -92,9 +110,15 @@
     document.getElementById("weekendGrid").innerHTML = weekendHtml;
 
     if (editable) {
-      attachChangeHandlers(document.getElementById("weekdayGrid"), rota);
-      attachChangeHandlers(document.getElementById("weekendGrid"), rota);
+      attachChangeHandlers(document.getElementById("weekdayGrid"), rota, renderOnly);
+      attachChangeHandlers(document.getElementById("weekendGrid"), rota, renderOnly);
     }
+  }
+
+  async function loadAndRender() {
+    const week = await loadWeek(profile.departmentId, weekInput.value);
+    rota = week.data || {};
+    renderOnly();
   }
 
   weekInput.addEventListener("change", loadAndRender);
@@ -108,7 +132,26 @@
       try { await saveWeek(profile.departmentId, weekInput.value, rota, true, user.uid); toast("Published"); }
       catch (e) { toast("Couldn't publish — try again", true); }
     });
+    document.getElementById("clearBtn").addEventListener("click", () => {
+      if (!confirm("Clear every box in this week's rota? This can't be undone until you save again.")) return;
+      rota = {};
+      renderOnly();
+      toast("Week cleared — remember to save or publish");
+    });
   }
+
+  // Print preview: swap to the read-only (plain text) rendering so the
+  // printed page shows names, not dropdown boxes, then restore the
+  // editable grid once printing is done or cancelled.
+  document.getElementById("printBtn").addEventListener("click", () => {
+    const { weekdayHtml, weekendHtml } = renderGrid({
+      weekStart: weekInput.value, dept, theatres, staff, rota, editable: false
+    });
+    document.getElementById("weekdayGrid").innerHTML = weekdayHtml;
+    document.getElementById("weekendGrid").innerHTML = weekendHtml;
+    window.print();
+  });
+  window.addEventListener("afterprint", renderOnly);
 
   await loadAndRender();
 </script>
