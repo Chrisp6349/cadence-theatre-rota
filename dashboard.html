@@ -25,6 +25,20 @@
   .tc-empty{font-size:12.5px;color:var(--ink-300);font-style:italic;}
   .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:8px;}
   .empty-note{color:var(--ink-500);font-size:13.5px;padding:20px 0;}
+
+  .myweek-card{margin-top:24px;}
+  .myweek-select-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .myweek-select-row select{font-family:var(--font-body);font-size:13.5px;padding:9px 12px;border-radius:var(--r-sm);
+    border:1px solid var(--ink-150);background:var(--surface);min-width:220px;}
+  .myweek-hi{font-family:var(--font-display);font-weight:800;font-size:16px;}
+  .myweek-change{background:none;border:none;color:var(--teal-600);font-size:12px;font-weight:600;cursor:pointer;
+    text-decoration:underline;padding:0;}
+  .myweek-days{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:14px;}
+  .myweek-day{background:var(--canvas);border:1px solid var(--ink-150);border-radius:var(--r-sm);padding:10px;}
+  .myweek-day.today{border-color:var(--teal-500);background:var(--teal-50);}
+  .myweek-day .md-label{font-family:var(--font-mono);font-size:10px;color:var(--ink-500);text-transform:uppercase;margin-bottom:5px;}
+  .myweek-day .md-role{font-size:12.5px;font-weight:600;color:var(--ink-900);}
+  .myweek-day .md-off{font-size:12.5px;color:var(--ink-300);font-style:italic;}
 </style>
 </head>
 <body>
@@ -33,7 +47,7 @@
 <script type="module">
   import { requireSession } from "./js/auth.js";
   import { renderShell } from "./js/shell.js";
-  import { getDepartment, listTheatres, splitStaff, listStaff } from "./js/department.js";
+  import { getDepartment, listTheatres, listStaff } from "./js/department.js";
   import { loadWeek, mondayOfCurrentWeek } from "./js/rota.js";
 
   const { user, profile } = await requireSession();
@@ -43,6 +57,7 @@
   const content = renderShell({ profile, activePage: "dashboard", title: "Dashboard" });
 
   const theatres = await listTheatres(profile.departmentId);
+  const staffList = await listStaff(profile.departmentId);
   const week = await loadWeek(profile.departmentId, mondayOfCurrentWeek());
   const rota = week.data || {};
 
@@ -99,6 +114,109 @@
   const bhBanner = (dept.bankHolidays && dept.bankHolidays[todayIso])
     ? `<div class="bh-banner">Today is a bank holiday</div>` : "";
 
+  // ---- My Week -----------------------------------------------------------
+  // Remembers the chosen name per department, on this device, in
+  // localStorage — no Firestore write needed (viewers can't write their
+  // own /users doc under the current rules), so this works for every role.
+  const MYWEEK_KEY = `cadence_myweek_${profile.departmentId}`;
+  const ALL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+  function isoPlusDays(mondayIso, i) {
+    const d = new Date(mondayIso + "T00:00:00");
+    d.setDate(d.getDate() + i);
+    return d;
+  }
+  function shortDate(d) {
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  }
+
+  // Turns "<theatreId>_odp1" / "_anaes" / "support1" / "oncall_odp" etc.
+  // into a human label, or null if this key isn't a person-placement field
+  // (list types, sessions, the from-home checkbox never match a name anyway).
+  function describePlacement(suffix) {
+    if (/_odp[12]$/.test(suffix)) {
+      const theatreId = suffix.replace(/_odp[12]$/, "");
+      const t = theatres.find(x => x.id === theatreId);
+      return t ? `${t.name} · ODP` : null;
+    }
+    if (suffix.endsWith("_anaes")) {
+      const theatreId = suffix.replace(/_anaes$/, "");
+      if (theatreId === "oncall") return "On call · Anaesthetist";
+      if (theatreId === "wl") return "Weekend waiting list · Anaesthetist";
+      const t = theatres.find(x => x.id === theatreId);
+      return t ? `${t.name} · Anaesthetist` : null;
+    }
+    if (/^support[123]$/.test(suffix)) return "Support";
+    if (suffix === "oncall_odp") return "On call";
+    if (suffix === "oncall_odp1" || suffix === "oncall_odp2") return "On call (weekend)";
+    if (suffix === "wl_odp") return "Weekend waiting list";
+    return null;
+  }
+
+  function placementsForDay(day, name) {
+    const found = [];
+    Object.entries(rota).forEach(([k, v]) => {
+      if (v !== name || !k.startsWith(day + "_")) return;
+      const label = describePlacement(k.slice(day.length + 1));
+      if (label) found.push(label);
+    });
+    return found;
+  }
+
+  function renderMyWeekResult(name) {
+    const dayCards = ALL_DAYS.map((day, i) => {
+      const d = isoPlusDays(mondayOfCurrentWeek(), i);
+      const isDayToday = d.toISOString().split("T")[0] === todayIso;
+      const placements = placementsForDay(day, name);
+      const body = placements.length
+        ? placements.map(p => `<div class="md-role">${p}</div>`).join("")
+        : `<div class="md-off">Not rostered</div>`;
+      return `<div class="myweek-day${isDayToday ? " today" : ""}">
+        <div class="md-label">${day.slice(0, 3)} ${shortDate(d)}</div>
+        ${body}
+      </div>`;
+    }).join("");
+
+    document.getElementById("myweekCard").innerHTML = `
+      <div class="myweek-select-row">
+        <span class="myweek-hi">${name}</span>
+        <button class="myweek-change" id="myweekChangeBtn">Not you? Switch name</button>
+      </div>
+      <div class="myweek-days">${dayCards}</div>
+    `;
+    document.getElementById("myweekChangeBtn").addEventListener("click", () => {
+      localStorage.removeItem(MYWEEK_KEY);
+      renderMyWeekPicker();
+    });
+  }
+
+  function renderMyWeekPicker() {
+    const sorted = [...staffList].sort((a, b) => a.name.localeCompare(b.name));
+    const options = sorted.map(s => `<option value="${s.name}">${s.name}${s.type === "anaesthetist" ? " (Anaesthetist)" : ""}</option>`).join("");
+    document.getElementById("myweekCard").innerHTML = `
+      <div class="myweek-select-row">
+        <select id="myweekSelect">
+          <option value="">Select your name…</option>
+          ${options}
+        </select>
+      </div>
+    `;
+    document.getElementById("myweekSelect").addEventListener("change", (e) => {
+      if (!e.target.value) return;
+      localStorage.setItem(MYWEEK_KEY, e.target.value);
+      renderMyWeekResult(e.target.value);
+    });
+  }
+
+  function initMyWeek() {
+    const saved = localStorage.getItem(MYWEEK_KEY);
+    if (saved && staffList.some(s => s.name === saved)) {
+      renderMyWeekResult(saved);
+    } else {
+      renderMyWeekPicker();
+    }
+  }
+
   content.innerHTML = `
     ${bhBanner}
     <div class="strip-label">Live theatre status — ${today}</div>
@@ -108,7 +226,11 @@
       <div class="card"><div class="card-label">On call ODP</div><div class="card-value" style="font-size:20px;">${onCallOdp}${onCallHome ? ` <span class="tc-list" style="font-size:9px;">FROM HOME</span>` : ""}</div></div>
       <div class="card"><div class="card-label">On call anaesthetist</div><div class="card-value" style="font-size:20px;">${onCallAnaes}</div></div>
     </div>
+    <div class="strip-label myweek-card">My Week</div>
+    <div class="card" id="myweekCard"></div>
   `;
+
+  initMyWeek();
 </script>
 </body>
 </html>
