@@ -15,7 +15,7 @@
 // caches are deleted automatically on the next load after that.
 // -----------------------------------------------------------------------
 
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const CACHE_NAME = `cadence-shell-${CACHE_VERSION}`;
 
 const SHELL_FILES = [
@@ -40,6 +40,7 @@ const SHELL_FILES = [
   "./js/theme.js",
   "./js/users.js",
   "./manifest.webmanifest",
+  "./Cadence-User-Guide.pdf",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png"
