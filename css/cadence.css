@@ -180,6 +180,13 @@ h4.admin-h{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;
 .list-toggle-btn{background:none;border:none;color:var(--teal-600);font-size:12px;font-weight:600;
   cursor:pointer;padding:0;text-decoration:underline;}
 
+.audit-entry{background:var(--surface);border:1px solid var(--ink-150);border-radius:var(--r-sm);
+  padding:10px 12px;font-size:13px;margin-bottom:6px;}
+.audit-entry .audit-headline{color:var(--ink-900);}
+.audit-entry .audit-time{font-family:var(--font-mono);font-size:11px;color:var(--ink-500);float:right;}
+.audit-entry .audit-changes{margin-top:6px;font-size:12px;color:var(--ink-500);line-height:1.5;}
+.audit-entry .audit-changes div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
 /* ---------- Toast ---------- */
 .toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,8px);background:var(--toast-bg);color:#fff;
   padding:10px 18px;border-radius:var(--r-sm);font-size:13px;font-weight:600;opacity:0;pointer-events:none;
