@@ -83,7 +83,24 @@
     return r;
   }
 
+  function renderSkeletonGrid() {
+    const dowHtml = ALL_DAYS.map(d => `<div class="cal-dow">${d.slice(0, 3)}</div>`).join("");
+    const cells = Array.from({ length: 35 }, () =>
+      `<div class="cal-cell"><div class="skeleton skeleton-text w-40"></div><div class="skeleton skeleton-text w-80" style="margin-top:10px;"></div></div>`
+    ).join("");
+    content.innerHTML = `
+      <div class="cal-nav">
+        <button disabled style="opacity:.4;">‹ Previous month</button>
+        <span class="cal-nav-label">${viewDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}</span>
+        <button disabled style="opacity:.4;">Next month ›</button>
+      </div>
+      <div class="cal-grid">${dowHtml}${cells}</div>
+    `;
+  }
+
   async function render() {
+    renderSkeletonGrid();
+
     const monthStart = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
     const monthEnd = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0);
     const gridStart = mondayOnOrBefore(monthStart);
