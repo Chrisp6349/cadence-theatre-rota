@@ -9,6 +9,7 @@
 
 import { logout } from "./auth.js";
 import { initThemeControls } from "./theme.js";
+import { registerServiceWorker } from "./pwa.js";
 
 const ICONS = {
   dashboard: `<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>`,
@@ -40,6 +41,7 @@ const NAV = [
 ];
 
 export function renderShell({ profile, activePage, title }) {
+  registerServiceWorker();
   const root = document.getElementById("shellRoot");
   const initials = (profile.displayName || "?").split(" ").map(s => s[0]).slice(0,2).join("").toUpperCase();
 
