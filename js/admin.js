@@ -35,6 +35,23 @@ function generateTempPassword() {
   return `${word.charAt(0).toUpperCase()}${word.slice(1)}-${num}`;
 }
 
+const EMPTY_ICONS = {
+  theatre: `<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v18M14 11.5v1"/>`,
+  staff: `<circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/>`,
+  tag: `<path d="M4 4h8l8 8-8 8-8-8V4z"/><circle cx="8.5" cy="8.5" r="1.2"/>`,
+  calendar: `<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>`,
+  key: `<circle cx="8" cy="15" r="4"/><path d="M10.5 12.5L20 3M17 6l3 3M14 9l2.5 2.5"/>`,
+  clock: `<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>`
+};
+
+function emptyState(icon, title, sub) {
+  return `<div class="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${EMPTY_ICONS[icon]}</svg>
+    <div class="es-title">${title}</div>
+    <div class="es-sub">${sub}</div>
+  </div>`;
+}
+
 // Lists longer than this default to collapsed (just a count + "Show"
 // link) so the page reads as a set of settings, not a wall of names.
 // State persists for the rest of this visit to the page, so toggling
@@ -94,6 +111,7 @@ export function renderAdmin(container, deptId, dept, myUid) {
         </form>
         <div class="section-list-head">
           <span class="count" id="theatreCount"></span>
+          <input type="text" class="list-filter" id="theatreFilter" placeholder="Filter…">
           <button class="list-toggle-btn" id="theatreToggleBtn" style="display:none;">Show</button>
         </div>
         <div id="theatreList" class="admin-list"></div>
@@ -111,6 +129,7 @@ export function renderAdmin(container, deptId, dept, myUid) {
         </form>
         <div class="section-list-head">
           <span class="count" id="staffCount"></span>
+          <input type="text" class="list-filter" id="staffFilter" placeholder="Filter…">
           <button class="list-toggle-btn" id="staffToggleBtn" style="display:none;">Show</button>
         </div>
         <div id="staffList" class="admin-list"></div>
@@ -159,6 +178,7 @@ export function renderAdmin(container, deptId, dept, myUid) {
         <div id="userFormError" class="empty-note" style="display:none;color:var(--status-oncall);"></div>
         <div class="section-list-head">
           <span class="count" id="userCount"></span>
+          <input type="text" class="list-filter" id="userFilter" placeholder="Filter…">
           <button class="list-toggle-btn" id="userToggleBtn" style="display:none;">Show</button>
         </div>
         <div id="userList" class="admin-list"></div>
@@ -176,12 +196,31 @@ export function renderAdmin(container, deptId, dept, myUid) {
   const staffListEl = container.querySelector("#staffList");
   const theatreCountEl = container.querySelector("#theatreCount");
   const theatreToggleBtn = container.querySelector("#theatreToggleBtn");
+  const theatreFilterEl = container.querySelector("#theatreFilter");
   const staffCountEl = container.querySelector("#staffCount");
   const staffToggleBtn = container.querySelector("#staffToggleBtn");
+  const staffFilterEl = container.querySelector("#staffFilter");
+
+  // Filters an already-rendered list by plain text match. Called once on
+  // every keystroke, and again after any refresh*() rebuild so a typed
+  // query survives adding/removing an item. Typing anything also forces
+  // the list open, since a collapsed-but-matching result would be
+  // confusing.
+  function applyFilter(inputEl, listEl) {
+    const q = inputEl.value.trim().toLowerCase();
+    [...listEl.children].forEach(row => {
+      if (!row.classList || !row.classList.contains("admin-row")) return;
+      row.classList.toggle("filtered-out", !(!q || row.textContent.toLowerCase().includes(q)));
+    });
+    if (q) listEl.classList.remove("collapsed");
+  }
+  theatreFilterEl.addEventListener("input", () => applyFilter(theatreFilterEl, theatreListEl));
+  staffFilterEl.addEventListener("input", () => applyFilter(staffFilterEl, staffListEl));
 
   async function refreshTheatres() {
     const theatres = await listTheatres(deptId);
-    theatreListEl.innerHTML = theatres.length ? "" : `<p class="empty-note">No theatres yet.</p>`;
+    theatreListEl.innerHTML = theatres.length ? "" :
+      emptyState("theatre", "No theatres yet", "Add your first theatre above to start building the rota.");
     theatres.forEach(t => {
       const row = document.createElement("div");
       row.className = "admin-row";
@@ -194,11 +233,13 @@ export function renderAdmin(container, deptId, dept, myUid) {
       theatreListEl.appendChild(row);
     });
     applyListCollapse("theatres", theatreListEl, theatreToggleBtn, theatreCountEl, theatres.length, "theatre");
+    applyFilter(theatreFilterEl, theatreListEl);
   }
 
   async function refreshStaff() {
     const staff = await listStaff(deptId);
-    staffListEl.innerHTML = staff.length ? "" : `<p class="empty-note">No staff yet.</p>`;
+    staffListEl.innerHTML = staff.length ? "" :
+      emptyState("staff", "No staff yet", "Add ODPs and anaesthetists above — they'll appear as options throughout the rota.");
     staff.sort((a, b) => a.name.localeCompare(b.name)).forEach(s => {
       const row = document.createElement("div");
       row.className = "admin-row";
@@ -212,6 +253,7 @@ export function renderAdmin(container, deptId, dept, myUid) {
       staffListEl.appendChild(row);
     });
     applyListCollapse("staff", staffListEl, staffToggleBtn, staffCountEl, staff.length, "staff member");
+    applyFilter(staffFilterEl, staffListEl);
   }
 
   container.querySelector("#theatreForm").addEventListener("submit", async (e) => {
@@ -239,7 +281,8 @@ export function renderAdmin(container, deptId, dept, myUid) {
   // ---- List types -----------------------------------------------------
   const listOptionsEl = container.querySelector("#listOptionsList");
   function refreshListOptions() {
-    listOptionsEl.innerHTML = listOptions.length ? "" : `<p class="empty-note">No list types yet.</p>`;
+    listOptionsEl.innerHTML = listOptions.length ? "" :
+      emptyState("tag", "No list types yet", "Add ROUTINE, EMERGENCY, or your own values above.");
     listOptions.forEach(val => {
       const row = document.createElement("div");
       row.className = "admin-row";
@@ -270,7 +313,8 @@ export function renderAdmin(container, deptId, dept, myUid) {
   const bhToggleBtn = container.querySelector("#bhToggleBtn");
   function refreshBankHolidays() {
     const dates = Object.keys(bankHolidays).sort();
-    bhListEl.innerHTML = dates.length ? "" : `<p class="empty-note">No bank holidays added yet.</p>`;
+    bhListEl.innerHTML = dates.length ? "" :
+      emptyState("calendar", "No bank holidays added yet", "Add a date above and it'll show automatically on the rota and calendar.");
     dates.forEach(iso => {
       const row = document.createElement("div");
       row.className = "admin-row";
@@ -309,11 +353,14 @@ export function renderAdmin(container, deptId, dept, myUid) {
   const userFormError = container.querySelector("#userFormError");
   const userCountEl = container.querySelector("#userCount");
   const userToggleBtn = container.querySelector("#userToggleBtn");
+  const userFilterEl = container.querySelector("#userFilter");
+  userFilterEl.addEventListener("input", () => applyFilter(userFilterEl, userListEl));
   const ROLE_LABELS = { viewer: "Viewer", editor: "Editor", admin: "Admin" };
 
   async function refreshUsers() {
     const users = (await listUsers(deptId)).sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""));
-    userListEl.innerHTML = users.length ? "" : `<p class="empty-note">No accounts yet.</p>`;
+    userListEl.innerHTML = users.length ? "" :
+      emptyState("key", "No accounts yet", "Create the first login above.");
     users.forEach(u => {
       const isMe = u.uid === myUid;
       const row = document.createElement("div");
@@ -341,6 +388,7 @@ export function renderAdmin(container, deptId, dept, myUid) {
       userListEl.appendChild(row);
     });
     applyListCollapse("users", userListEl, userToggleBtn, userCountEl, users.length, "account");
+    applyFilter(userFilterEl, userListEl);
   }
 
   container.querySelector("#genPasswordBtn").addEventListener("click", () => {
@@ -386,7 +434,8 @@ export function renderAdmin(container, deptId, dept, myUid) {
 
   async function refreshAuditLog() {
     const entries = await listRecentAuditLog(deptId, 20);
-    auditLogEl.innerHTML = entries.length ? "" : `<p class="empty-note">No changes recorded yet.</p>`;
+    auditLogEl.innerHTML = entries.length ? "" :
+      emptyState("clock", "No changes recorded yet", "Every rota save and publish will show up here.");
     entries.forEach(e => {
       const row = document.createElement("div");
       row.className = "audit-entry";
