@@ -7,7 +7,8 @@
 // -----------------------------------------------------------------------
 
 import {
-  auth, db, onAuthStateChanged, signInWithEmailAndPassword, signOut, doc, getDoc
+  auth, db, onAuthStateChanged, signInWithEmailAndPassword, signOut, doc, getDoc,
+  updatePassword, reauthenticateWithCredential, EmailAuthProvider
 } from "./firebase-init.js";
 
 // Resolves once with { user, profile } or redirects to index.html (login)
@@ -38,6 +39,17 @@ export async function login(email, password) {
 export async function logout() {
   await signOut(auth);
   window.location.href = "index.html";
+}
+
+// Changes the signed-in user's own password. Firebase refuses a bare
+// updatePassword() call unless the sign-in is "recent" — reauthenticating
+// with their current password first satisfies that every time, so this
+// works whether they signed in 30 seconds or 3 weeks ago.
+export async function changeOwnPassword(currentPassword, newPassword) {
+  const user = auth.currentUser;
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+  await updatePassword(user, newPassword);
 }
 
 // Simple role-gate helper: pass the profile and the roles allowed to
