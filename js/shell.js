@@ -22,7 +22,8 @@ const ICONS = {
   minus: `<path d="M5 12h14"/>`,
   plus: `<path d="M12 5v14M5 12h14"/>`,
   menu: `<path d="M4 6h16M4 12h16M4 18h16"/>`,
-  key: `<circle cx="8" cy="15" r="4"/><path d="M10.5 12.5L20 3M17 6l3 3M14 9l2.5 2.5"/>`
+  key: `<circle cx="8" cy="15" r="4"/><path d="M10.5 12.5L20 3M17 6l3 3M14 9l2.5 2.5"/>`,
+  help: `<path d="M4 4h11l5 5v11a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1z"/><path d="M15 4v5h5"/><path d="M8 13h6M8 16h4"/>`
 };
 
 function iconSvg(key){
@@ -76,6 +77,9 @@ export function renderShell({ profile, activePage, title }) {
           </div>
           <a class="btn btn-ghost btn-sm" href="account.html" title="Account">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">${ICONS.key}</svg>
+          </a>
+          <a class="btn btn-ghost btn-sm" href="Cadence-User-Guide.pdf" target="_blank" rel="noopener" title="User guide">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS.help}</svg>
           </a>
           <button class="btn btn-ghost btn-sm" id="logoutBtn" title="Sign out">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
