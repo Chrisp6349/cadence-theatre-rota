@@ -19,30 +19,58 @@
     padding:10px 12px;border-radius:var(--r-sm);margin-bottom:16px;}
   .login-error.show{display:block;}
   .btn-block{width:100%;justify-content:center;}
+  .forgot-link{background:none;border:none;color:var(--teal-600);font-size:12.5px;font-weight:600;
+    cursor:pointer;padding:0;text-decoration:underline;margin:-10px 0 16px;display:block;}
+  .reset-panel{display:none;}
+  .reset-panel.show{display:block;}
+  .login-card.reset-mode #loginFields, .login-card.reset-mode #loginBtn,
+  .login-card.reset-mode .forgot-link, .login-card.reset-mode #loginSub{display:none;}
+  .reset-msg{display:none;font-size:13px;padding:10px 12px;border-radius:var(--r-sm);margin-bottom:16px;}
+  .reset-msg.show{display:block;background:var(--status-available-bg);color:var(--status-available);}
+  .back-link{background:none;border:none;color:var(--ink-500);font-size:12.5px;font-weight:600;
+    cursor:pointer;padding:0;text-decoration:underline;margin-top:12px;}
 </style>
 </head>
 <body>
-  <form class="login-card" id="loginForm">
+  <div class="login-card" id="loginCard">
     <div class="login-mark">C</div>
     <h1>Sign in to Cadence</h1>
-    <p class="sub">Enter the details your department admin gave you.</p>
-    <div class="login-error" id="loginError"></div>
-    <div class="field">
-      <label for="email">Email</label>
-      <input type="email" id="email" required autocomplete="username">
-    </div>
-    <div class="field">
-      <label for="password">Password</label>
-      <input type="password" id="password" required autocomplete="current-password">
-    </div>
-    <button class="btn btn-primary btn-block" type="submit" id="loginBtn">Sign in</button>
-  </form>
+
+    <form id="loginForm">
+      <p class="sub" id="loginSub">Enter the details your department admin gave you.</p>
+      <div class="login-error" id="loginError"></div>
+      <div id="loginFields">
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" required autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" required autocomplete="current-password">
+        </div>
+      </div>
+      <button class="forgot-link" type="button" id="forgotBtn">Forgot password?</button>
+      <button class="btn btn-primary btn-block" type="submit" id="loginBtn">Sign in</button>
+    </form>
+
+    <form class="reset-panel" id="resetPanel">
+      <p class="sub" style="margin-top:0;">Enter your email and we'll send you a link to reset your password.</p>
+      <div class="reset-msg" id="resetMsg"></div>
+      <div class="field">
+        <label for="resetEmail">Email</label>
+        <input type="email" id="resetEmail" autocomplete="username">
+      </div>
+      <button class="btn btn-primary btn-block" type="submit" id="resetSendBtn">Send reset link</button>
+      <button class="back-link" type="button" id="backToLoginBtn">Back to sign in</button>
+    </form>
+  </div>
 
   <script type="module">
-    import { login } from "./js/auth.js";
+    import { login, sendPasswordReset } from "./js/auth.js";
     import { applyTheme } from "./js/theme.js";
     applyTheme();
 
+    const card = document.getElementById("loginCard");
     const form = document.getElementById("loginForm");
     const errBox = document.getElementById("loginError");
     const btn = document.getElementById("loginBtn");
@@ -61,6 +89,50 @@
         btn.disabled = false;
         btn.textContent = "Sign in";
       }
+    });
+
+    // ---- Forgot password ---------------------------------------------------
+    const resetPanel = document.getElementById("resetPanel");
+    const resetMsg = document.getElementById("resetMsg");
+    const resetEmailInput = document.getElementById("resetEmail");
+    const resetSendBtn = document.getElementById("resetSendBtn");
+
+    function showResetPanel() {
+      card.classList.add("reset-mode");
+      resetPanel.classList.add("show");
+      resetMsg.classList.remove("show");
+      resetEmailInput.value = document.getElementById("email").value.trim();
+    }
+    function hideResetPanel() {
+      card.classList.remove("reset-mode");
+      resetPanel.classList.remove("show");
+    }
+
+    document.getElementById("forgotBtn").addEventListener("click", showResetPanel);
+    document.getElementById("backToLoginBtn").addEventListener("click", hideResetPanel);
+
+    resetPanel.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = resetEmailInput.value.trim();
+      if (!email) return;
+      resetSendBtn.disabled = true;
+      try {
+        await sendPasswordReset(email);
+      } catch (err) {
+        // Deliberately not distinguishing "no account with that email" from
+        // success — telling people which emails exist in the system is an
+        // information leak, so the message is the same either way. A
+        // genuinely malformed email is the only case worth calling out.
+        if (err.code !== "auth/user-not-found") {
+          resetMsg.textContent = "Couldn't send that — check the email address and try again.";
+          resetMsg.classList.add("show");
+          resetSendBtn.disabled = false;
+          return;
+        }
+      }
+      resetMsg.textContent = "If that email has an account, a reset link is on its way.";
+      resetMsg.classList.add("show");
+      resetSendBtn.disabled = false;
     });
   </script>
 </body>
