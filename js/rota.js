@@ -11,7 +11,7 @@
 // theatre list instead of being hardcoded (t1/t2/t4/t5/cath).
 // -----------------------------------------------------------------------
 
-import { db, doc, getDoc, setDoc } from "./firebase-init.js";
+import { db, doc, getDoc, setDoc, collection, addDoc, serverTimestamp } from "./firebase-init.js";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const WEEKENDS = ["Saturday", "Sunday"];
@@ -40,13 +40,90 @@ export async function loadWeek(deptId, weekStart) {
   return snap.exists() ? snap.data() : { data: {}, published: false };
 }
 
-export async function saveWeek(deptId, weekStart, data, publish, uid) {
-  await setDoc(doc(db, "departments", deptId, "weeks", weekStart), {
+// Turns a "<Day>_<suffix>" key into a human-readable field name for the
+// audit log — same key-shape knowledge as insights.js's classify(), but
+// covering every field (list types, sessions, from-home) since all of
+// them matter for an audit trail, not just person placements.
+function describeField(day, suffix, theatres) {
+  let m = suffix.match(/^(.+)_odp([12])$/);
+  if (m) {
+    const t = theatres.find(x => x.id === m[1]);
+    if (t) return `${day} ${t.name} ODP${m[2]}`;
+  }
+  m = suffix.match(/^(.+)_anaes$/);
+  if (m) {
+    if (m[1] === "oncall") return `${day} On call Anaesthetist`;
+    if (m[1] === "wl") return `${day} Weekend waiting list Anaesthetist`;
+    const t = theatres.find(x => x.id === m[1]);
+    if (t) return `${day} ${t.name} Anaesthetist`;
+  }
+  m = suffix.match(/^(.+)_list$/);
+  if (m) {
+    if (m[1] === "support") return `${day} Support list type`;
+    const t = theatres.find(x => x.id === m[1]);
+    if (t) return `${day} ${t.name} list type`;
+  }
+  if (/^support[123]$/.test(suffix)) return `${day} Support ${suffix.slice(-1)}`;
+  if (suffix === "oncall_odp") return `${day} On call ODP`;
+  if (suffix === "oncall_extra") return `${day} On call extra`;
+  if (suffix === "oncall_home") return `${day} On call — from home`;
+  if (suffix === "oncall_odp1" || suffix === "oncall_odp2") return `${day} On call ODP ${suffix.slice(-1)}`;
+  if (suffix === "oncall_session1" || suffix === "oncall_session2") return `${day} On call session ${suffix.slice(-1)}`;
+  if (suffix === "wl_odp") return `${day} Weekend waiting list ODP`;
+  return `${day} ${suffix}`;
+}
+
+function formatVal(v) {
+  if (v === true) return "Yes";
+  if (!v) return "";
+  return String(v);
+}
+
+// Diffs the previous saved version against the new one, field by field,
+// for the audit log. Booleans (the from-home checkbox) and strings are
+// both handled — anything falsy on either side is treated as "empty".
+function diffRota(oldData, newData, theatres) {
+  const keys = new Set([...Object.keys(oldData || {}), ...Object.keys(newData || {})]);
+  const changes = [];
+  keys.forEach(k => {
+    const oldV = oldData?.[k], newV = newData?.[k];
+    if (formatVal(oldV) === formatVal(newV)) return;
+    const m = k.match(/^([A-Za-z]+)_(.+)$/);
+    if (!m) return;
+    changes.push({ field: describeField(m[1], m[2], theatres), from: formatVal(oldV), to: formatVal(newV) });
+  });
+  return changes;
+}
+
+// `theatres` and `displayName` are only used to build a readable audit
+// log entry — omit them (e.g. from older call sites) and saving still
+// works, it just skips logging.
+export async function saveWeek(deptId, weekStart, data, publish, uid, theatres = [], displayName = "") {
+  const ref = doc(db, "departments", deptId, "weeks", weekStart);
+  const prevSnap = await getDoc(ref);
+  const prevData = prevSnap.exists() ? (prevSnap.data().data || {}) : {};
+
+  await setDoc(ref, {
     data,
     published: !!publish,
     updatedAt: new Date().toISOString(),
     updatedBy: uid
   }, { merge: true });
+
+  if (!theatres.length) return; // no theatre list passed in — can't describe fields, skip logging
+  const changes = diffRota(prevData, data, theatres);
+  if (!changes.length) return;
+
+  await addDoc(collection(db, "departments", deptId, "auditLog"), {
+    weekStart,
+    uid,
+    displayName,
+    action: publish ? "published" : "saved a draft of",
+    changeCount: changes.length,
+    changes: changes.slice(0, 20),
+    truncated: changes.length > 20,
+    timestamp: serverTimestamp()
+  });
 }
 
 // ---- Grid rendering --------------------------------------------------------
