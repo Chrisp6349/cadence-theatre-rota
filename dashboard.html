@@ -256,11 +256,21 @@
     const el = document.getElementById("tiCard");
     if (!el) return;
     if (!intelligence) {
-      el.innerHTML = `<p class="empty-note">Loading…</p>`;
+      el.innerHTML = `
+        <div class="ti-body">
+          <div class="skeleton skeleton-text w-80"></div>
+          <div class="skeleton skeleton-text w-60"></div>
+          <div class="skeleton skeleton-text w-80"></div>
+          <div class="skeleton skeleton-text w-40"></div>
+        </div>`;
       return;
     }
     if (!intelligence.hasData) {
-      el.innerHTML = `<p class="empty-note">Check back once a few weeks of rota have been published — Theatre Intelligence needs some history to work with.</p>`;
+      el.innerHTML = `<div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+        <div class="es-title">Nothing to show yet</div>
+        <div class="es-sub">Check back once a few weeks of rota have been published — Theatre Intelligence needs some history to work with.</div>
+      </div>`;
       return;
     }
     const facts = intelligence.pickFacts(4);
@@ -315,7 +325,11 @@
             ${rows || `<div class="tc-empty">No allocation</div>`}
           </div>`;
         }).join("")
-      : `<span class="empty-note">No theatres configured yet — add them in Administration.</span>`;
+      : `<div class="empty-state" style="grid-column:1/-1;">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v18M14 11.5v1"/></svg>
+          <div class="es-title">No theatres configured yet</div>
+          <div class="es-sub">Add your theatres in Administration and they'll appear here.</div>
+        </div>`;
 
     const sessionsCount = theatres.filter(t => theatreInfo(day, t).status === "inlist").length;
 
