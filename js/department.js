@@ -6,7 +6,7 @@
 // editable from the Administration screen.
 // -----------------------------------------------------------------------
 
-import { db, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, query, orderBy } from "./firebase-init.js";
+import { db, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, query, orderBy, limit } from "./firebase-init.js";
 
 export async function getDepartment(deptId) {
   const snap = await getDoc(doc(db, "departments", deptId));
@@ -52,4 +52,11 @@ export function splitStaff(staffList) {
     odps: staffList.filter(s => s.type === "odp").map(s => s.name),
     anaesthetists: staffList.filter(s => s.type === "anaesthetist").map(s => s.name)
   };
+}
+
+// ---- Audit log ------------------------------------------------------------
+export async function listRecentAuditLog(deptId, count = 20) {
+  const q = query(collection(db, "departments", deptId, "auditLog"), orderBy("timestamp", "desc"), limit(count));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
