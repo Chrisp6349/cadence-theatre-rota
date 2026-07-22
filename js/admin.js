@@ -8,7 +8,7 @@
 import {
   listTheatres, saveTheatre, deleteTheatre,
   listStaff, saveStaff, deleteStaff,
-  updateDepartment
+  updateDepartment, listRecentAuditLog
 } from "./department.js";
 import { listUsers, createUserAccount, updateUserRole, revokeUserAccess } from "./users.js";
 
@@ -162,6 +162,12 @@ export function renderAdmin(container, deptId, dept, myUid) {
           <button class="list-toggle-btn" id="userToggleBtn" style="display:none;">Show</button>
         </div>
         <div id="userList" class="admin-list"></div>
+      </section>
+
+      <section>
+        <h4 class="admin-h">Change log</h4>
+        <p class="empty-note" style="margin:-6px 0 10px;">The most recent rota changes, for auditing — who changed what, and when.</p>
+        <div id="auditLogList" class="admin-list"></div>
       </section>
     </div>
   `;
@@ -370,9 +376,36 @@ export function renderAdmin(container, deptId, dept, myUid) {
     }
   });
 
+  // ---- Change log -----------------------------------------------------
+  const auditLogEl = container.querySelector("#auditLogList");
+
+  function formatTimestamp(ts) {
+    if (!ts?.toDate) return "";
+    return ts.toDate().toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
+
+  async function refreshAuditLog() {
+    const entries = await listRecentAuditLog(deptId, 20);
+    auditLogEl.innerHTML = entries.length ? "" : `<p class="empty-note">No changes recorded yet.</p>`;
+    entries.forEach(e => {
+      const row = document.createElement("div");
+      row.className = "audit-entry";
+      const changesPreview = (e.changes || []).slice(0, 3)
+        .map(c => `<div>${c.field}: ${c.from || "(empty)"} → ${c.to || "(empty)"}</div>`).join("");
+      const moreCount = (e.changeCount || 0) - Math.min(3, (e.changes || []).length);
+      row.innerHTML = `
+        <span class="audit-time">${formatTimestamp(e.timestamp)}</span>
+        <div class="audit-headline"><strong>${e.displayName || "Someone"}</strong> ${e.action || "updated"} week commencing ${e.weekStart} — ${e.changeCount || 0} change${e.changeCount === 1 ? "" : "s"}</div>
+        <div class="audit-changes">${changesPreview}${moreCount > 0 ? `<div>+${moreCount} more</div>` : ""}</div>
+      `;
+      auditLogEl.appendChild(row);
+    });
+  }
+
   refreshTheatres();
   refreshStaff();
   refreshListOptions();
   refreshBankHolidays();
   refreshUsers();
+  refreshAuditLog();
 }
