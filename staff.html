@@ -74,8 +74,20 @@
         ).join("")}
       </select>
     </div>
-    <div id="profileArea"><p class="empty-note">Pick a name above to see their history.</p></div>
+    <div id="profileArea">${emptyStateHtml("staff", "Pick a name to see their history", "Choose an ODP or anaesthetist above — sessions, on-call, and their favourite theatre all pull from the published rota.")}</div>
   `;
+
+  function emptyStateHtml(icon, title, sub) {
+    const icons = {
+      staff: `<circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/>`,
+      chart: `<path d="M4 20V10M12 20V4M20 20v-7"/>`
+    };
+    return `<div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${icons[icon]}</svg>
+      <div class="es-title">${title}</div>
+      <div class="es-sub">${sub}</div>
+    </div>`;
+  }
 
   // Fetch and flatten the whole published history once — every profile
   // lookup after that is instant, no further Firestore reads.
@@ -125,7 +137,7 @@
   function render(name, type) {
     const el = document.getElementById("profileArea");
     if (!name) {
-      el.innerHTML = `<p class="empty-note">Pick a name above to see their history.</p>`;
+      el.innerHTML = emptyStateHtml("staff", "Pick a name to see their history", "Choose an ODP or anaesthetist above — sessions, on-call, and their favourite theatre all pull from the published rota.");
       return;
     }
     const p = buildProfile(name, type);
@@ -137,7 +149,7 @@
           <div class="sp-avatar">${initials(name)}</div>
           <div><div class="sp-name">${name}</div><div class="sp-role">${type === "anaesthetist" ? "Anaesthetist" : "ODP"}</div></div>
         </div>
-        <p class="empty-note">No published rota history for ${name} yet.</p>`;
+        ${emptyStateHtml("chart", "No published history yet", `Once a week including ${name} is published, their sessions and stats will show up here.`)}`;
       return;
     }
 
