@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cadence — Account</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/cadence.css">
+<style>
+  .account-card{max-width:420px;}
+  .account-card h4{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--ink-500);margin:0 0 4px;}
+  .account-email{font-size:14px;color:var(--ink-900);margin-bottom:20px;}
+  .form-msg{font-size:13px;padding:10px 12px;border-radius:var(--r-sm);margin-bottom:14px;display:none;}
+  .form-msg.error{display:block;background:var(--status-oncall-bg);color:var(--status-oncall);}
+  .form-msg.success{display:block;background:var(--status-available-bg);color:var(--status-available);}
+</style>
+</head>
+<body>
+<div id="shellRoot"></div>
+
+<script type="module">
+  import { requireSession, changeOwnPassword } from "./js/auth.js";
+  import { renderShell } from "./js/shell.js";
+  import { getDepartment } from "./js/department.js";
+  import { applyTheme } from "./js/theme.js";
+  applyTheme();
+
+  const { user, profile } = await requireSession();
+  const dept = await getDepartment(profile.departmentId);
+  profile.departmentName = dept?.name || "Department";
+
+  const content = renderShell({ profile, activePage: "account", title: "Account" });
+
+  content.innerHTML = `
+    <div class="card account-card">
+      <h4>Signed in as</h4>
+      <div class="account-email">${user.email}</div>
+
+      <h4>Change password</h4>
+      <div class="form-msg" id="pwMsg"></div>
+      <form id="pwForm">
+        <div class="field">
+          <label for="currentPw">Current password</label>
+          <input type="password" id="currentPw" required autocomplete="current-password">
+        </div>
+        <div class="field">
+          <label for="newPw">New password</label>
+          <input type="password" id="newPw" required autocomplete="new-password" minlength="6">
+        </div>
+        <div class="field">
+          <label for="confirmPw">Confirm new password</label>
+          <input type="password" id="confirmPw" required autocomplete="new-password" minlength="6">
+        </div>
+        <button class="btn btn-primary" type="submit" id="pwSubmitBtn">Update password</button>
+      </form>
+    </div>
+  `;
+
+  const msgEl = document.getElementById("pwMsg");
+  function showMsg(text, kind) {
+    msgEl.textContent = text;
+    msgEl.className = `form-msg ${kind}`;
+  }
+
+  document.getElementById("pwForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    msgEl.className = "form-msg";
+    const current = document.getElementById("currentPw").value;
+    const next = document.getElementById("newPw").value;
+    const confirm = document.getElementById("confirmPw").value;
+
+    if (next !== confirm) { showMsg("New password and confirmation don't match.", "error"); return; }
+    if (next.length < 6) { showMsg("New password needs to be at least 6 characters.", "error"); return; }
+
+    const btn = document.getElementById("pwSubmitBtn");
+    btn.disabled = true;
+    try {
+      await changeOwnPassword(current, next);
+      showMsg("Password updated.", "success");
+      e.target.reset();
+    } catch (err) {
+      const messages = {
+        "auth/wrong-password": "That current password isn't right.",
+        "auth/invalid-credential": "That current password isn't right.",
+        "auth/too-many-requests": "Too many attempts — wait a moment and try again.",
+        "auth/weak-password": "Password needs to be at least 6 characters."
+      };
+      showMsg(messages[err.code] || "Couldn't update your password — please try again.", "error");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
