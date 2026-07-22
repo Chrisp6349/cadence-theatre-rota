@@ -20,7 +20,8 @@ const ICONS = {
   moon: `<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>`,
   minus: `<path d="M5 12h14"/>`,
   plus: `<path d="M12 5v14M5 12h14"/>`,
-  menu: `<path d="M4 6h16M4 12h16M4 18h16"/>`
+  menu: `<path d="M4 6h16M4 12h16M4 18h16"/>`,
+  key: `<circle cx="8" cy="15" r="4"/><path d="M10.5 12.5L20 3M17 6l3 3M14 9l2.5 2.5"/>`
 };
 
 function iconSvg(key){
@@ -71,6 +72,9 @@ export function renderShell({ profile, activePage, title }) {
             <div class="who">${profile.displayName || "—"}</div>
             <div class="role">${profile.role}</div>
           </div>
+          <a class="btn btn-ghost btn-sm" href="account.html" title="Account">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">${ICONS.key}</svg>
+          </a>
           <button class="btn btn-ghost btn-sm" id="logoutBtn" title="Sign out">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
           </button>
