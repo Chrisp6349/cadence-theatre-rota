@@ -7,6 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/cadence.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0B6E64">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>
   body{display:flex;align-items:center;justify-content:center;min-height:100vh;}
   .login-card{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--ink-150);
@@ -68,7 +71,9 @@
   <script type="module">
     import { login, sendPasswordReset } from "./js/auth.js";
     import { applyTheme } from "./js/theme.js";
+    import { registerServiceWorker } from "./js/pwa.js";
     applyTheme();
+    registerServiceWorker();
 
     const card = document.getElementById("loginCard");
     const form = document.getElementById("loginForm");
