@@ -75,6 +75,16 @@
 
   const content = renderShell({ profile, activePage: "rota", title: "Rota" });
 
+  function rotaSkeleton(rows) {
+    const row = `<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--ink-100);">
+      <div class="skeleton skeleton-text w-40" style="width:70px;flex-shrink:0;"></div>
+      <div class="skeleton skeleton-text w-80" style="flex:1;"></div>
+      <div class="skeleton skeleton-text w-60" style="flex:1;"></div>
+      <div class="skeleton skeleton-text w-80" style="flex:1;"></div>
+    </div>`;
+    return `<div style="padding:6px 4px;">${row.repeat(rows)}</div>`;
+  }
+
   content.innerHTML = `
     <div class="rota-toolbar">
       <input type="date" id="weekDate">
@@ -95,9 +105,9 @@
       </div>
       <div class="ph-week" id="phWeek"></div>
     </div>
-    <div class="table-scroll"><div id="weekdayGrid"></div></div>
+    <div class="table-scroll"><div id="weekdayGrid">${rotaSkeleton(5)}</div></div>
     <h4 class="section-title">Weekend</h4>
-    <div class="table-scroll"><div id="weekendGrid"></div></div>
+    <div class="table-scroll"><div id="weekendGrid">${rotaSkeleton(2)}</div></div>
   `;
 
   const theatres = await listTheatres(profile.departmentId);
@@ -136,8 +146,11 @@
     if (previewMode) updatePrintHeader();
 
     if (!theatres.length) {
-      document.getElementById("weekdayGrid").innerHTML = `<p style="padding:20px;color:var(--ink-500);">
-        No theatres set up yet. ${profile.role === "admin" ? "Add them in Administration." : "Ask your admin to add them."}</p>`;
+      document.getElementById("weekdayGrid").innerHTML = `<div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v18M14 11.5v1"/></svg>
+        <div class="es-title">No theatres set up yet</div>
+        <div class="es-sub">${profile.role === "admin" ? "Add them in Administration." : "Ask your admin to add them."}</div>
+      </div>`;
       document.getElementById("weekendGrid").innerHTML = "";
       return;
     }
