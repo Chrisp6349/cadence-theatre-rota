@@ -161,11 +161,11 @@
 
   if (editable) {
     document.getElementById("saveDraftBtn").addEventListener("click", async () => {
-      try { await saveWeek(profile.departmentId, weekInput.value, rota, false, user.uid); toast("Draft saved"); }
+      try { await saveWeek(profile.departmentId, weekInput.value, rota, false, user.uid, theatres, profile.displayName); toast("Draft saved"); }
       catch (e) { toast("Couldn't save — try again", true); }
     });
     document.getElementById("publishBtn").addEventListener("click", async () => {
-      try { await saveWeek(profile.departmentId, weekInput.value, rota, true, user.uid); toast("Published"); }
+      try { await saveWeek(profile.departmentId, weekInput.value, rota, true, user.uid, theatres, profile.displayName); toast("Published"); }
       catch (e) { toast("Couldn't publish — try again", true); }
     });
     document.getElementById("clearBtn").addEventListener("click", () => {
