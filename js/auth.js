@@ -8,7 +8,7 @@
 
 import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, signOut, doc, getDoc,
-  updatePassword, reauthenticateWithCredential, EmailAuthProvider
+  updatePassword, reauthenticateWithCredential, EmailAuthProvider, sendPasswordResetEmail
 } from "./firebase-init.js";
 
 // Resolves once with { user, profile } or redirects to index.html (login)
@@ -34,6 +34,16 @@ export function requireSession() {
 
 export async function login(email, password) {
   return signInWithEmailAndPassword(auth, email, password);
+}
+
+// Sends a password reset link to the given email via Firebase's built-in
+// flow — the person clicks it, lands on a Firebase-hosted page, sets a
+// new password, then comes back and signs in normally. Firebase resolves
+// this the same way whether or not the email is actually registered (so
+// as not to reveal who has an account), so the caller can't tell those
+// two cases apart either — the UI should give the same message either way.
+export async function sendPasswordReset(email) {
+  return sendPasswordResetEmail(auth, email);
 }
 
 export async function logout() {
