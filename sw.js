@@ -15,7 +15,7 @@
 // caches are deleted automatically on the next load after that.
 // -----------------------------------------------------------------------
 
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 const CACHE_NAME = `cadence-shell-${CACHE_VERSION}`;
 
 const SHELL_FILES = [
@@ -34,6 +34,7 @@ const SHELL_FILES = [
   "./js/firebase-config.js",
   "./js/firebase-init.js",
   "./js/insights.js",
+  "./js/messages.js",
   "./js/pwa.js",
   "./js/rota.js",
   "./js/shell.js",
