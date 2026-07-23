@@ -3,19 +3,21 @@
 // Makes Cadence installable and usable with no/patchy signal (theatre
 // corridors are exactly the kind of place that happens).
 //
-// Strategy: network-first, cache-fallback, for everything in the app
-// shell (HTML/CSS/JS/icons). Online, you always get the latest deployed
-// version — the cache is just a safety net for when the network request
-// fails. Firestore's own requests (a different origin) are never
-// intercepted here at all; they're handled by Firestore's own offline
+// Strategy: network-first, cache-fallback, for the known app-shell files
+// only (HTML/CSS/JS/icons/manifest/guide). Online, you always get the
+// latest deployed version — the cache is just a safety net for when a
+// request fails. Firestore's own requests (a different origin) are never
+// intercepted here; they're handled by Firestore's own offline
 // persistence, set up separately in firebase-init.js.
 //
-// Bump CACHE_VERSION whenever you change any cached file and want
-// already-installed copies of the app to pick up the change — old
-// caches are deleted automatically on the next load after that.
+// Bump CACHE_VERSION whenever you change a cached file and want
+// already-installed copies to pick it up — old caches are deleted
+// automatically once the new one activates. pwa.js also forces an update
+// check on every page load and reloads once a new version takes over, so
+// this shouldn't need a manual "clear site data" to take effect.
 // -----------------------------------------------------------------------
 
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 const CACHE_NAME = `cadence-shell-${CACHE_VERSION}`;
 
 const SHELL_FILES = [
@@ -47,9 +49,27 @@ const SHELL_FILES = [
   "./icons/apple-touch-icon.png"
 ];
 
+// Resolved against sw.js's own location (the repo root), not just the
+// origin — matters because this site lives at a sub-path, not the domain
+// root. Used below to recognise a shell file regardless of any query
+// string a request might carry (e.g. dashboard.html?week=...&day=...).
+const SHELL_PATHS = new Set(SHELL_FILES.map((f) => new URL(f, self.location.href).pathname));
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_FILES))
+    caches.open(CACHE_NAME).then((cache) =>
+      // Cache each file independently. cache.addAll() is all-or-nothing —
+      // one missing or mismatched file (a guide PDF not yet uploaded, an
+      // icon with the wrong case, anything) used to fail the ENTIRE
+      // install silently, permanently stranding devices on whatever
+      // older, more broken service worker was already running. A failed
+      // fetch here just means that one file isn't precached yet; it gets
+      // cached opportunistically the first time it's actually requested
+      // (see the fetch handler below), and everything else still works.
+      Promise.all(SHELL_FILES.map((url) =>
+        cache.add(url).catch((err) => console.warn("Cadence SW: couldn't precache", url, err))
+      ))
+    )
   );
   self.skipWaiting();
 });
@@ -64,20 +84,30 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  const url = new URL(event.request.url);
+  const req = event.request;
+  const url = new URL(req.url);
 
-  // Only handle our own same-origin GET requests. Everything else
-  // (Firestore, Google Fonts, gstatic SDK imports, POST requests) passes
-  // straight through untouched.
-  if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
+  // Only handle our own same-origin GET requests to known app-shell
+  // files. Everything else (Firestore, Google Fonts, gstatic SDK
+  // imports, any other same-origin request) passes straight through
+  // untouched — deliberately not a catch-all, so the cache can't grow
+  // without bound.
+  if (req.method !== "GET" || url.origin !== self.location.origin) return;
+  if (!SHELL_PATHS.has(url.pathname)) return;
 
   event.respondWith(
-    fetch(event.request)
+    fetch(req)
       .then((networkResponse) => {
-        const copy = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        // Only persist the canonical (query-free) URL — a link like
+        // dashboard.html?week=...&day=... is still handled (network-first,
+        // same as everything else), it just isn't its own cache entry.
+        // Offline, it falls back to the plain cached dashboard.html below.
+        if (!url.search) {
+          const copy = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+        }
         return networkResponse;
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./dashboard.html")))
+      .catch(() => caches.match(req).then((cached) => cached || caches.match("./dashboard.html")))
   );
 });
