@@ -15,7 +15,16 @@ import { db, collection, addDoc, deleteDoc, doc, getDocs, query, where, orderBy,
 
 export function postMessage(deptId, uid, displayName, text, dateKey) {
   return addDoc(collection(db, "departments", deptId, "messages"), {
-    text, uid, displayName, dateKey, createdAt: serverTimestamp()
+    text, uid, displayName, dateKey,
+    createdAt: serverTimestamp(),
+    // A brand-new message has createdAt === null locally until the
+    // server round-trip resolves it a moment later — and Firestore
+    // silently excludes a document from live query results while the
+    // field you're ordering by is null. That's exactly what "have to
+    // refresh before my own message shows up" looks like. clientTime is
+    // a plain number, available the instant the write happens, so it's
+    // what watchTodayMessages actually orders by below.
+    clientTime: Date.now()
   });
 }
 
@@ -32,7 +41,7 @@ export function watchTodayMessages(deptId, dateKey, callback) {
   const q = query(
     collection(db, "departments", deptId, "messages"),
     where("dateKey", "==", dateKey),
-    orderBy("createdAt", "asc")
+    orderBy("clientTime", "asc")
   );
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -65,6 +74,6 @@ export function buildArchiveGroups(messages) {
   });
   return Object.keys(byDate).sort().reverse().map(dateKey => ({
     dateKey,
-    messages: byDate[dateKey].sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0))
+    messages: byDate[dateKey].sort((a, b) => (a.clientTime || 0) - (b.clientTime || 0))
   }));
 }
