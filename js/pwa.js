@@ -10,6 +10,14 @@
 // in-browser and as an installed home-screen app) is slow and
 // inconsistent about surfacing a new service worker on its own, which is
 // what "stuck on an old cached version" looks like from the outside.
+//
+// One extra wrinkle specific to installed home-screen apps on iOS:
+// "closing and reopening" one from the home screen usually just RESUMES
+// the app from where iOS suspended it, rather than truly restarting it —
+// so a "check on page load" alone can go a long time without ever firing
+// again. The pageshow/visibilitychange listeners below cover that: any
+// time the app becomes visible again, whether that's a genuine reload or
+// just a resume from the background, it re-checks for an update.
 // -----------------------------------------------------------------------
 
 export function registerServiceWorker() {
@@ -26,20 +34,34 @@ export function registerServiceWorker() {
     window.location.reload();
   });
 
+  let registrationRef = null;
+  function checkForUpdate() {
+    if (!registrationRef) return;
+    // Bypasses normal HTTP caching for the script itself (per the service
+    // worker spec), so it reliably sees a freshly deployed version rather
+    // than a stale cached copy of sw.js.
+    registrationRef.update().catch(() => {});
+  }
+
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./sw.js")
       .then((registration) => {
-        // Ask immediately whether a newer sw.js exists on the server,
-        // rather than waiting on the browser's own update timer. Per the
-        // service worker spec this check bypasses normal HTTP caching for
-        // the script itself, so it reliably sees a freshly deployed
-        // version rather than a stale cached copy of sw.js.
-        registration.update().catch(() => {});
+        registrationRef = registration;
+        checkForUpdate();
       })
       .catch(() => {
         // Offline on first-ever visit, or served somewhere that doesn't
         // support service workers — the app still works, just without
         // the offline/installable extras.
       });
+  });
+
+  // Covers "reopened a home-screen app that iOS just resumed rather than
+  // restarted" — both events can fire in that situation, so checking on
+  // either (cheap, and registrationRef being null until first load makes
+  // it a no-op before then) reliably catches it.
+  window.addEventListener("pageshow", checkForUpdate);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") checkForUpdate();
   });
 }
