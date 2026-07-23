@@ -352,6 +352,13 @@
     const bhBanner = (dept.bankHolidays && dept.bankHolidays[dayIso])
       ? `<div class="bh-banner">${isActualToday ? "Today" : day} is a bank holiday</div>` : "";
 
+    // Support is a day-level field (not tied to any one theatre — see the
+    // Support column in rota.js), so it only ever appears on weekdays and
+    // needs its own card rather than living inside a theatre card.
+    const supportOdps = [rota[`${day}_support1`], rota[`${day}_support2`], rota[`${day}_support3`]]
+      .filter(Boolean).join(", ") || "—";
+    const supportList = rota[`${day}_support_list`] || "";
+
     content.innerHTML = `
       ${weekNavHtml}
       ${dayTabsHtml}
@@ -360,6 +367,7 @@
       <div class="theatre-grid">${theatreCardsHtml}</div>
       <div class="stat-grid">
         <div class="card"><div class="card-label">Sessions</div><div class="card-value">${sessionsCount} / ${theatres.length}</div></div>
+        <div class="card"><div class="card-label">Support ODP</div><div class="card-value" style="font-size:20px;">${supportOdps}${supportList ? ` <span class="tc-list" style="font-size:9px;">${supportList}</span>` : ""}</div></div>
         <div class="card"><div class="card-label">On call ODP</div><div class="card-value" style="font-size:20px;">${onCallOdp}${onCallHome ? ` <span class="tc-list" style="font-size:9px;">FROM HOME</span>` : ""}</div></div>
         <div class="card"><div class="card-label">On call anaesthetist</div><div class="card-value" style="font-size:20px;">${onCallAnaes}</div></div>
       </div>
