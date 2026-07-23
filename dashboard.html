@@ -65,6 +65,27 @@
   .ti-shuffle{display:flex;justify-content:flex-end;margin-top:12px;}
   .ti-shuffle button{background:none;border:none;color:var(--teal-600);font-size:12px;font-weight:600;
     cursor:pointer;padding:0;text-decoration:underline;}
+
+  .tb-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .tb-toggle{background:none;border:none;color:var(--teal-600);font-size:12px;font-weight:600;
+    cursor:pointer;padding:0;text-decoration:underline;}
+  .tb-list{display:flex;flex-direction:column;gap:12px;max-height:280px;overflow-y:auto;margin-bottom:14px;padding-right:4px;}
+  .tb-msg{display:flex;gap:10px;align-items:flex-start;}
+  .tb-avatar{width:28px;height:28px;border-radius:50%;background:var(--teal-100);color:var(--teal-700);
+    display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;font-size:10.5px;flex-shrink:0;}
+  .tb-body{flex:1;min-width:0;}
+  .tb-meta{font-size:11px;color:var(--ink-500);margin-bottom:2px;}
+  .tb-meta strong{color:var(--ink-700);font-weight:600;}
+  .tb-text{font-size:13.5px;color:var(--ink-900);line-height:1.45;overflow-wrap:break-word;}
+  .tb-del{background:none;border:none;color:var(--ink-300);cursor:pointer;font-size:15px;line-height:1;padding:2px;flex-shrink:0;}
+  .tb-del:hover{color:var(--status-oncall);}
+  .tb-form{display:flex;gap:8px;}
+  .tb-form input{flex:1;font-family:var(--font-body);font-size:13.5px;padding:9px 14px;border-radius:var(--r-pill);
+    border:1px solid var(--ink-150);background:var(--surface);color:var(--ink-900);}
+  .tb-date-group{margin-bottom:18px;}
+  .tb-date-group:last-child{margin-bottom:0;}
+  .tb-date-label{font-family:var(--font-mono);font-size:10.5px;color:var(--ink-500);text-transform:uppercase;
+    letter-spacing:.04em;margin-bottom:8px;}
 </style>
 </head>
 <body>
@@ -76,6 +97,7 @@
   import { getDepartment, listTheatres, listStaff } from "./js/department.js";
   import { loadWeek, mondayOfCurrentWeek } from "./js/rota.js";
   import { loadTheatreIntelligence } from "./js/insights.js";
+  import { postMessage, deleteMessage, watchTodayMessages, loadArchive, buildArchiveGroups } from "./js/messages.js";
   import { applyTheme } from "./js/theme.js";
   applyTheme();
 
@@ -245,6 +267,115 @@
     }
   }
 
+  // ---- Team Board ----------------------------------------------------
+  // Live-updating (via watchTodayMessages below) — todayMessages is kept
+  // fresh in the background and just re-rendered on change, same pattern
+  // as Theatre Intelligence. Archive is fetched once on demand and cached
+  // for the rest of this visit.
+  let todayMessages = [];
+  let boardMode = "today"; // "today" | "archive"
+  let archiveGroups = null;
+
+  function initials(name) {
+    return (name || "?").split(" ").map(s => s[0]).slice(0, 2).join("").toUpperCase();
+  }
+  function formatMsgTime(ts) {
+    return ts?.toDate ? ts.toDate().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "sending…";
+  }
+  // Message text is always set via textContent after insertion (see the
+  // two loops below), never interpolated into the HTML string — so a
+  // posted message can never be interpreted as markup.
+  function msgRowHtml(id, displayName, createdAt, canDelete) {
+    return `<div class="tb-msg">
+      <div class="tb-avatar">${initials(displayName)}</div>
+      <div class="tb-body">
+        <div class="tb-meta"><strong>${displayName || "Someone"}</strong> · ${formatMsgTime(createdAt)}</div>
+        <div class="tb-text" data-msg-id="${id}"></div>
+      </div>
+      ${canDelete ? `<button class="tb-del" data-del="${id}" title="Delete">×</button>` : ""}
+    </div>`;
+  }
+
+  async function toggleBoardMode() {
+    boardMode = boardMode === "today" ? "archive" : "today";
+    renderTeamBoard();
+    if (boardMode === "archive" && !archiveGroups) {
+      const msgs = await loadArchive(profile.departmentId, todayIso);
+      archiveGroups = buildArchiveGroups(msgs);
+      renderTeamBoard();
+    }
+  }
+
+  function renderTeamBoard() {
+    const el = document.getElementById("teamBoardCard");
+    if (!el) return;
+
+    const headHtml = `<div class="tb-head"><span class="strip-label" style="margin:0;">Team Board</span>
+      <button class="tb-toggle" id="tbToggleBtn">${boardMode === "today" ? "Archive" : "Today"}</button></div>`;
+
+    if (boardMode === "archive") {
+      let bodyHtml;
+      if (!archiveGroups) {
+        bodyHtml = `<div class="skeleton skeleton-text w-40"></div><div class="skeleton skeleton-text w-80" style="margin-top:10px;"></div>`;
+      } else if (!archiveGroups.length) {
+        bodyHtml = `<div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11l5 5v11a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1z"/><path d="M15 4v5h5"/></svg>
+          <div class="es-title">Nothing archived yet</div>
+          <div class="es-sub">Once today ends, anything posted here moves into the archive automatically.</div>
+        </div>`;
+      } else {
+        bodyHtml = `<div class="tb-list" style="max-height:340px;">${archiveGroups.map(g => `
+          <div class="tb-date-group">
+            <div class="tb-date-label">${new Date(g.dateKey + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</div>
+            ${g.messages.map(m => msgRowHtml(m.id, m.displayName, m.createdAt, false)).join("")}
+          </div>`).join("")}</div>`;
+      }
+      el.innerHTML = headHtml + bodyHtml;
+      if (archiveGroups) {
+        archiveGroups.flatMap(g => g.messages).forEach(m => {
+          const node = el.querySelector(`[data-msg-id="${m.id}"]`);
+          if (node) node.textContent = m.text;
+        });
+      }
+    } else {
+      const listHtml = todayMessages.length
+        ? `<div class="tb-list">${todayMessages.map(m => msgRowHtml(m.id, m.displayName, m.createdAt, m.uid === user.uid || profile.role === "admin")).join("")}</div>`
+        : `<div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 01-9.9 8.25 8.5 8.5 0 01-6.32-3.17L3 21l1.42-4.24a8.5 8.5 0 01-.9-3.76 8.38 8.38 0 018.25-9.9 8.5 8.5 0 018.23 8.4z"/></svg>
+            <div class="es-title">No messages yet today</div>
+            <div class="es-sub">First to know something worth sharing? Post it below.</div>
+          </div>`;
+      el.innerHTML = `${headHtml}${listHtml}
+        <form class="tb-form" id="tbForm">
+          <input type="text" id="tbInput" placeholder="Share something with the team…" maxlength="500" autocomplete="off">
+          <button class="btn btn-primary btn-sm" type="submit">Post</button>
+        </form>`;
+      todayMessages.forEach(m => {
+        const node = el.querySelector(`[data-msg-id="${m.id}"]`);
+        if (node) node.textContent = m.text;
+      });
+
+      el.querySelectorAll("[data-del]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          if (!confirm("Delete this message?")) return;
+          await deleteMessage(profile.departmentId, btn.dataset.del);
+        });
+      });
+      document.getElementById("tbForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const input = document.getElementById("tbInput");
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = "";
+        await postMessage(profile.departmentId, user.uid, profile.displayName || "Someone", text, todayIso);
+      });
+      const listEl = el.querySelector(".tb-list");
+      if (listEl) listEl.scrollTop = listEl.scrollHeight;
+    }
+
+    document.getElementById("tbToggleBtn").addEventListener("click", toggleBoardMode);
+  }
+
   // ---- Theatre Intelligence -------------------------------------------
   // Fetched once in the background (see the bottom of this file) and
   // cached — day/week navigation re-renders the page often, but that
@@ -363,6 +494,7 @@
       ${weekNavHtml}
       ${dayTabsHtml}
       ${bhBanner}
+      <div class="card" id="teamBoardCard" style="margin-bottom:24px;"></div>
       <div class="strip-label">Live theatre status — ${day}${isActualToday ? " (today)" : ""}</div>
       <div class="theatre-grid">${theatreCardsHtml}</div>
       <div class="stat-grid">
@@ -390,6 +522,7 @@
 
     initMyWeek();
     renderTI();
+    renderTeamBoard();
   }
 
   async function changeWeek(delta, jumpToThisWeek) {
@@ -405,6 +538,14 @@
   loadTheatreIntelligence(profile.departmentId, theatres, mondayOfCurrentWeek(), todayIso).then(ti => {
     intelligence = ti;
     renderTI();
+  });
+
+  // Live for as long as this page is open — a colleague posting shows up
+  // for everyone else without a refresh. Only re-renders when in "today"
+  // mode, since archive mode has its own separately-fetched, cached data.
+  watchTodayMessages(profile.departmentId, todayIso, (msgs) => {
+    todayMessages = msgs;
+    if (boardMode === "today") renderTeamBoard();
   });
 </script>
 </body>
