@@ -15,7 +15,7 @@
 // caches are deleted automatically on the next load after that.
 // -----------------------------------------------------------------------
 
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const CACHE_NAME = `cadence-shell-${CACHE_VERSION}`;
 
 const SHELL_FILES = [
